@@ -1,0 +1,12 @@
+{
+  "secondary_analysis.flnc_bams": [
+    "File"
+  ],
+  "secondary_analysis.ref_map_file": "File",
+  "secondary_analysis.pigeon_use_polya": true,
+  "secondary_analysis.pigeon_use_cage_peak": true,
+  "secondary_analysis.pigeon_use_junction": true,
+  "secondary_analysis.isocall_extra_merged_profile": "File? (optional)",
+  "secondary_analysis.output_prefix": "joint",
+  "secondary_analysis.backend": "HPC"
+}

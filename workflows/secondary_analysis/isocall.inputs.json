@@ -1,0 +1,12 @@
+{
+  "isocall.aligned_bams": [
+    "File"
+  ],
+  "isocall.aligned_bam_bais": [
+    "File"
+  ],
+  "isocall.isocall_extra_merged_profile": "File? (optional)",
+  "isocall.ref_map_file": "File",
+  "isocall.output_prefix": "joint",
+  "isocall.backend": "HPC"
+}

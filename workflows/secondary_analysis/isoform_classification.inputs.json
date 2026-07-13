@@ -1,0 +1,10 @@
+{
+  "isoform_classification.isoforms_gtf": "File",
+  "isoform_classification.isocall_count_matrix": "File",
+  "isoform_classification.ref_map_file": "File",
+  "isoform_classification.pigeon_use_polya": true,
+  "isoform_classification.pigeon_use_cage_peak": true,
+  "isoform_classification.pigeon_use_junction": true,
+  "isoform_classification.output_prefix": "joint",
+  "isoform_classification.backend": "HPC"
+}

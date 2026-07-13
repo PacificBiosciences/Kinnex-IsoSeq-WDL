@@ -1,0 +1,18 @@
+{
+  "preprocessing.hifi_sources": [
+    {
+      "hifi_bam": "File",
+      "hifi_barcode": "bcM0001--bcM0001"
+    },
+    {
+      "hifi_bam": "File",
+      "hifi_barcode": "bcM0002--bcM0002"
+    }
+  ],
+  "preprocessing.biosample_csv": "File",
+  "preprocessing.hifi_demux_barcodes": "File",
+  "preprocessing.skera_adapters": "File",
+  "preprocessing.barcoded_primers": "File",
+  "preprocessing.isoseq_require_polya": true,
+  "preprocessing.backend": "HPC"
+}

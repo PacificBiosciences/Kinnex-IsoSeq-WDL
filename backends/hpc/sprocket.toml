@@ -1,0 +1,74 @@
+[run]
+# The Slurm/Apptainer backend is currently experimental in Sprocket.
+experimental_features_enabled = true
+
+# Keep Sprocket's outputs under the current run directory by default.
+output_dir = "sprocket_out"
+
+# When a task fails, already-running tasks are allowed to finish,
+# which pairs better with call caching.
+fail = "slow"
+
+# The named task-execution backend to use for workflow runs.
+backend = "default"
+
+[server.database]
+# `sprocket run` records run provenance in this SQLite database even outside
+# server mode.
+url = "sprocket_out/sprocket.db"
+
+[run.http]
+# Cache remote HTTP inputs, if any, under the current run directory.
+cache_dir = "sprocket_http_cache"
+
+[run.workflow.scatter]
+# This controls how many scatter elements evaluates concurrently. It
+# does not directly cap jobs, but lower values can reduce memory
+# use for very large scatters.
+concurrency = 1000
+
+[run.task]
+# Default task settings used when a task does not provide a corresponding WDL
+# runtime/requirements value. RNA tasks set their own production containers.
+container = "ubuntu:22.04"
+shell = "bash"
+retries = 2
+
+# Deny tasks whose requested CPU or memory cannot fit the selected
+# partition instead of silently clamping resources.
+cpu_limit_behavior = "deny"
+memory_limit_behavior = "deny"
+
+# Enable task call caching for repeat or resumed runs.
+cache = "on"
+cache_dir = "sprocket_call_cache"
+
+[run.backends.default]
+# Submit each task as a job that runs the task container through
+# Apptainer or Singularity.
+type = "slurm_apptainer"
+
+# Default partition for workflow tasks. Sprocket passes this as
+# `sbatch --partition=<name>`. Sites may also set max_cpu_per_task and
+# max_memory_per_task here to fail unschedulable tasks before submission.
+default_slurm_partition.name = "compute"
+
+# Use the container runtime on this cluster.
+apptainer.executable = "/usr/bin/singularity"
+
+# Sprocket already adds `--containall` and `--cleanenv` to Apptainer/Singularity
+# task execution (See https://github.com/stjude-rust-labs/sprocket/blob/main/crates/wdl-engine/src/backend/apptainer.rs#L191).
+# Add only site-specific extra `exec` flags here.
+apptainer.extra_args = []
+
+# Extra arguments passed to `sbatch`. Keep partition selection in
+# `default_slurm_partition.name`; use this for account, QoS, reservation,
+# comments, and similar site policy.
+sbatch.args = ["--comment", "run with sprocket"]
+
+# Prefix job names so jobs are easy to identify in `squeue`.
+job_name_prefix = "sprocket"
+
+# Shared cache for pulled images. This path must be visible from both the
+# submit node and compute nodes.
+apptainer.image_cache_dir = "sprocket_image_cache"
