@@ -127,7 +127,7 @@ workflow isoform_classification {
 
   output {
     String workflow_name = "isoform_classification"
-    String workflow_version = "0.1.0"
+    String workflow_version = "0.2.0"
     String reference_name = reference_mapping["name"]
     File pigeon_classification = isoform_classification_core.pigeon_classification
     File filtered_isoforms_gtf = isoform_classification_core.filtered_isoforms_gtf

@@ -63,7 +63,7 @@ task isocall_profile {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:5bfbbdc7df8e1d71dd3cee5960e95fe5e96cdfdc8ed1a3b7adb5a80aa65f078d"  # 1.0.0_build2
+    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
@@ -125,7 +125,7 @@ task isocall_prep_isoforms {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:5bfbbdc7df8e1d71dd3cee5960e95fe5e96cdfdc8ed1a3b7adb5a80aa65f078d"  # 1.0.0_build2
+    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
@@ -181,12 +181,12 @@ task isocall_merge_profiles {
       isocall_extra_merged_profile
     ])
   ])
-  File all_profiles_file = write_lines(all_profiles)
 
   command <<<
     set -euo pipefail
 
-    mapfile -t all_profiles < "~{all_profiles_file}"
+    printf '%s\n' "~{sep="\" \"" all_profiles}" > all_profiles.txt
+    mapfile -t all_profiles < all_profiles.txt
 
     isocall merge \
       --profiles "${all_profiles[@]}" \
@@ -201,7 +201,7 @@ task isocall_merge_profiles {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:5bfbbdc7df8e1d71dd3cee5960e95fe5e96cdfdc8ed1a3b7adb5a80aa65f078d"  # 1.0.0_build2
+    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
@@ -302,7 +302,7 @@ task isocall_call {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:5bfbbdc7df8e1d71dd3cee5960e95fe5e96cdfdc8ed1a3b7adb5a80aa65f078d"  # 1.0.0_build2
+    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }

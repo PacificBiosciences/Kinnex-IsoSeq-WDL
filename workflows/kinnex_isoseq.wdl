@@ -244,7 +244,7 @@ workflow kinnex_isoseq {
 
   output {
     String workflow_name = "kinnex_isoseq"
-    String workflow_version = "0.1.0"
+    String workflow_version = "0.2.0"
     String preprocessing_workflow_name = "preprocessing"
     String secondary_analysis_workflow_name = "secondary_analysis"
     String reference_name = secondary_analysis_core.reference_name

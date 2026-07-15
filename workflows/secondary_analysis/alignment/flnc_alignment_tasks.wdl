@@ -42,12 +42,12 @@ task group_flnc_bams_by_sm {
   Int mem_gb = 4
   Int total_mem_mb = (mem_gb * 1024) + runtime_attributes.add_memory_mb
 
-  File flnc_bams_file = write_lines(flnc_bams)
-
   command <<<
     set -euo pipefail
 
-    python3 - "~{flnc_bams_file}" <<'PY'
+    printf '%s\n' "~{sep="\" \"" flnc_bams}" > flnc_bams.txt
+
+    python3 - flnc_bams.txt <<'PY'
     import collections
     import json
     import re
@@ -229,14 +229,13 @@ task samtools_merge {
   File sample_name_file = write_lines([
     sample_name
   ])
-  File flnc_bams_file = write_lines(flnc_bams)
   String output_prefix = sample_prefix
 
   command <<<
     set -euo pipefail
 
     sample_name="$(cat "~{sample_name_file}")"
-    cp "~{flnc_bams_file}" selected_flnc_bams.txt
+    printf '%s\n' "~{sep="\" \"" flnc_bams}" > selected_flnc_bams.txt
 
     group_size="$(grep -cve '^[[:space:]]*$' selected_flnc_bams.txt || true)"
     output_bam="~{output_prefix}.flnc.bam"

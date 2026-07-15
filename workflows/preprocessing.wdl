@@ -143,7 +143,7 @@ workflow preprocessing {
 
   output {
     String workflow_name = "preprocessing"
-    String workflow_version = "0.1.0"
+    String workflow_version = "0.2.0"
     Array[String] source_dataset_names = preprocessing_core.source_dataset_names
     Array[String] dataset_names = preprocessing_core.dataset_names
     Array[File] hifi_demux_datasets = preprocessing_core.hifi_demux_datasets

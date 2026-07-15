@@ -118,7 +118,7 @@ workflow isocall {
 
   output {
     String workflow_name = "isocall"
-    String workflow_version = "0.1.0"
+    String workflow_version = "0.2.0"
     String reference_name = reference_mapping["name"]
     File isocall_isoforms_gtf = isocall_core.isocall_isoforms_gtf
     File isocall_count_matrix = isocall_core.isocall_count_matrix

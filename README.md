@@ -230,7 +230,7 @@ WDL runtime blocks.
 
 ## Version information
 
-Current version: **0.1.0**.
+Current version: **0.2.0**.
 
 For a complete changelog, see the [changelog](CHANGELOG.md) or the git history.
 

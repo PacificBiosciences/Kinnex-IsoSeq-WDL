@@ -66,9 +66,7 @@ task validate_preprocessing_inputs {
   command <<<
     set -euo pipefail
 
-    cat > hifi_bams.txt <<'EOF'
-    ~{sep="\n" hifi_bams}
-    EOF
+    printf '%s\n' "~{sep="\" \"" hifi_bams}" > hifi_bams.txt
 
     needs_hifi_demux="~{true="true" false="false" needs_hifi_demux}"
 
@@ -344,13 +342,8 @@ task validate_consensusreadset_xmls {
   command <<<
     set -euo pipefail
 
-    cat > consensusreadset_xmls.txt <<'EOF'
-    ~{sep="\n" consensusreadset_xmls}
-    EOF
-
-    cat > source_hifi_bams.txt <<'EOF'
-    ~{sep="\n" source_hifi_bams}
-    EOF
+    printf '%s\n' "~{sep="\" \"" consensusreadset_xmls}" > consensusreadset_xmls.txt
+    printf '%s\n' "~{sep="\" \"" source_hifi_bams}" > source_hifi_bams.txt
 
     python3 - \
       "consensusreadset_xmls.txt" \
@@ -835,13 +828,8 @@ task populate_flnc_dataset_xml {
   command <<<
     set -euo pipefail
 
-    cat > flnc_bams.txt <<'EOF'
-    ~{sep="\n" flnc_bams}
-    EOF
-
-    cat > flnc_bam_pbis.txt <<'EOF'
-    ~{sep="\n" flnc_bam_pbis}
-    EOF
+    printf '%s\n' "~{sep="\" \"" flnc_bams}" > flnc_bams.txt
+    printf '%s\n' "~{sep="\" \"" flnc_bam_pbis}" > flnc_bam_pbis.txt
 
     python3 - \
       "~{consensusreadset_xml}" \

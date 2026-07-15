@@ -156,7 +156,7 @@ workflow secondary_analysis {
 
   output {
     String workflow_name = "secondary_analysis"
-    String workflow_version = "0.1.0"
+    String workflow_version = "0.2.0"
     String reference_name = secondary_analysis_core.reference_name
     Array[String] sample_names = secondary_analysis_core.sample_names
     Array[String] sample_prefixes = secondary_analysis_core.sample_prefixes
