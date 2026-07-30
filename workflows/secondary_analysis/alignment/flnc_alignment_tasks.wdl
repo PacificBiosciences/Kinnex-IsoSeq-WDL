@@ -148,7 +148,7 @@ task group_flnc_bams_by_sm {
         for sample_name, bams in sample_to_bams.items():
             bam_indices = sample_to_bam_indices[sample_name]
             sample_prefix = sample_to_prefix[sample_name]
-            action = 'merge' if len(bams) > 1 else 'passthrough'
+            action = 'align_then_merge' if len(bams) > 1 else 'align'
             sample_fh.write(sample_name + '\n')
             prefix_fh.write(sample_prefix + '\n')
             group_sizes.append(len(bams))
@@ -181,25 +181,28 @@ task group_flnc_bams_by_sm {
   }
 }
 
-task samtools_merge {
+task pbsamoa_merge_aligned_bams {
   meta {
-    description: "Merge one FLNC sample group into a single grouped BAM with samtools."
+    description: "Merge coordinate-sorted aligned FLNC BAMs and build the final BAM index with pbsamoa."
     outputs: {
-      grouped_flnc_bam: {
-        description: "Grouped FLNC BAM"
+      merged_bam: {
+        description: "Merged aligned FLNC BAM"
+      },
+      merged_bam_index: {
+        description: "Merged aligned FLNC BAM index"
       }
     }
   }
 
   parameter_meta {
-    sample_name: {
-      description: "Sample name"
+    bams: {
+      description: "Coordinate-sorted aligned FLNC BAMs"
     }
-    sample_prefix: {
-      description: "Sample prefix"
+    out_prefix: {
+      description: "Output BAM prefix"
     }
-    flnc_bams: {
-      description: "FLNC BAMs"
+    compression: {
+      description: "Compression level for the output BAM"
     }
     threads: {
       description: "CPU threads"
@@ -213,11 +216,11 @@ task samtools_merge {
   }
 
   input {
-    String sample_name
-    String sample_prefix
-    Array[File] flnc_bams
-    Int threads = 8
-    Int mem_gb = 32
+    Array[File] bams
+    String out_prefix
+    Int compression = 6
+    Int threads = 32
+    Int mem_gb = 16
     RuntimeAttributes runtime_attributes
   }
 
@@ -226,82 +229,64 @@ task samtools_merge {
     then runtime_attributes.nproc
     else threads
 
-  File sample_name_file = write_lines([
-    sample_name
-  ])
-  String output_prefix = sample_prefix
+  Int decode_threads = if effective_threads >= 4
+    then floor(effective_threads * 0.25)
+    else 1
+  Int compress_threads = if effective_threads > 1
+    then effective_threads - decode_threads
+    else 1
 
   command <<<
     set -euo pipefail
 
-    sample_name="$(cat "~{sample_name_file}")"
-    printf '%s\n' "~{sep="\" \"" flnc_bams}" > selected_flnc_bams.txt
-
-    group_size="$(grep -cve '^[[:space:]]*$' selected_flnc_bams.txt || true)"
-    output_bam="~{output_prefix}.flnc.bam"
-
-    if [ "${group_size}" -lt 1 ]; then
-      echo "samtools_merge requires at least one FLNC BAM for sample ${sample_name}; observed ${group_size}" >&2
+    printf '%s\n' "~{sep="\" \"" bams}" > aligned_bams.txt
+    bam_count="$(grep -cve '^[[:space:]]*$' aligned_bams.txt || true)"
+    if [ "${bam_count}" -lt 2 ]; then
+      echo "pbsamoa_merge_aligned_bams requires at least two aligned BAMs; observed ${bam_count}" >&2
       exit 1
     fi
 
-    samtools_threads_args=()
-    if [ "~{effective_threads}" -gt 1 ]; then
-      samtools_threads_args=(--threads "$((~{effective_threads} - 1))")
-    fi
+    pbsamoa merge \
+      --order coordinate \
+      --compress-threads ~{compress_threads} \
+      --decode-threads ~{decode_threads} \
+      --memory ~{mem_gb}G \
+      --compression ~{compression} \
+      "~{out_prefix}.aligned.bam" \
+      "~{sep="\" \"" bams}"
 
-    samtools merge \
-      "${samtools_threads_args[@]}" \
-      -c \
-      -p \
-      -o "${output_bam}" \
-      -b selected_flnc_bams.txt
-
-    action="merge"
-
-    {
-      printf 'sample_name\tsample_prefix\tgroup_size\taction\toutput_bam\n'
-      printf '%s\t%s\t%s\t%s\t%s\n' \
-        "${sample_name}" \
-        "~{sample_prefix}" \
-        "${group_size}" \
-        "${action}" \
-        "${output_bam}"
-    } > "~{output_prefix}.samtools_merge.log"
+    # Index in a second pass because pbsamoa's on-the-fly --bai mode is not
+    # available when valid coordinate-sorted inputs use its disjoint-range
+    # passthrough path.
+    pbsamoa bai-build \
+      --threads ~{effective_threads} \
+      "~{out_prefix}.aligned.bam"
   >>>
 
   output {
-    File grouped_flnc_bam = "~{output_prefix}.flnc.bam"
+    File merged_bam = "~{out_prefix}.aligned.bam"
+    File merged_bam_index = "~{out_prefix}.aligned.bam.bai"
   }
 
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/pb_wdl_base@sha256:03cb3c01937eccc907f8ad71c87b258581504572205fe3f31a657e318f3564ae"
+    docker: runtime_attributes.container_registry + "/pbsamoa@sha256:381891341e4d33ea9b3ca1c8a7cac7d86d4feea282bc8d12b6201a77cbd4216e"  # 20250702_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
 
-task pbmm2_align_flnc {
+task create_pbmm2_index {
   meta {
-    description: "Align one grouped FLNC sample BAM with pbmm2 using the ISOSEQ preset."
+    description: "Create one pbmm2 reference index using the ISOSEQ preset."
     outputs: {
-      aligned_bam: {
-        description: "Aligned FLNC BAM"
-      },
-      aligned_bam_index: {
-        description: "Aligned FLNC BAM index"
+      pbmm2_index: {
+        description: "pbmm2 ISOSEQ reference index"
       }
     }
   }
 
   parameter_meta {
-    sample_prefix: {
-      description: "Sample prefix"
-    }
-    flnc_bam: {
-      description: "FLNC BAM"
-    }
     genome_fasta: {
       description: "Reference FASTA"
     }
@@ -317,11 +302,9 @@ task pbmm2_align_flnc {
   }
 
   input {
-    String sample_prefix
-    File flnc_bam
     File genome_fasta
-    Int threads = 16
-    Int mem_gb = 48
+    Int threads = 8
+    Int mem_gb = 32
     RuntimeAttributes runtime_attributes
   }
 
@@ -330,7 +313,77 @@ task pbmm2_align_flnc {
     then runtime_attributes.nproc
     else threads
 
-  String output_prefix = sample_prefix
+  command <<<
+    set -euo pipefail
+
+    pbmm2 index \
+      --preset ISOSEQ \
+      --num-threads ~{effective_threads} \
+      --log-level INFO \
+      --log-file pbmm2.index.log \
+      "~{genome_fasta}" \
+      reference.mmi
+  >>>
+
+  output {
+    File pbmm2_index = "reference.mmi"
+  }
+
+  runtime {
+    cpu: effective_threads
+    memory: total_mem_mb + " MB"
+    docker: runtime_attributes.container_registry + "/pbmm2@sha256:0c21f29f1ee429dbafe5c332d4abffcfed5efbf5448b4ef06dd189b5323a7051"  # 26.2.0_build1
+    maxRetries: runtime_attributes.max_retries
+  }
+}
+
+task pbmm2_align_flnc {
+  meta {
+    description: "Align one FLNC BAM with pbmm2 using the ISOSEQ preset."
+    outputs: {
+      aligned_bam: {
+        description: "Aligned FLNC BAM"
+      },
+      aligned_bam_index: {
+        description: "Aligned FLNC BAM index"
+      }
+    }
+  }
+
+  parameter_meta {
+    output_prefix: {
+      description: "Output prefix"
+    }
+    flnc_bam: {
+      description: "FLNC BAM"
+    }
+    pbmm2_index: {
+      description: "pbmm2 ISOSEQ reference index"
+    }
+    threads: {
+      description: "CPU threads"
+    }
+    mem_gb: {
+      description: "Memory allocation in GB"
+    }
+    runtime_attributes: {
+      description: "Runtime attribute structure"
+    }
+  }
+
+  input {
+    String output_prefix
+    File flnc_bam
+    File pbmm2_index
+    Int threads = 32
+    Int mem_gb = 64
+    RuntimeAttributes runtime_attributes
+  }
+
+  Int total_mem_mb = (mem_gb * 1024) + runtime_attributes.add_memory_mb
+  Int effective_threads = if (threads > runtime_attributes.nproc)
+    then runtime_attributes.nproc
+    else threads
 
   command <<<
     set -euo pipefail
@@ -343,7 +396,7 @@ task pbmm2_align_flnc {
       --num-threads ~{effective_threads} \
       --log-level INFO \
       --log-file "~{output_prefix}.pbmm2.log" \
-      "~{genome_fasta}" \
+      "~{pbmm2_index}" \
       "~{flnc_bam}" \
       "~{output_prefix}.aligned.bam"
   >>>

@@ -10,19 +10,18 @@
     }
   ],
   "kinnex_isoseq.biosample_csv": "File",
-  "kinnex_isoseq.hifi_demux_barcodes": "File",
-  "kinnex_isoseq.skera_adapters": "File",
-  "kinnex_isoseq.barcoded_primers": "File",
-  "kinnex_isoseq.ref_map_file": "File",
-  "kinnex_isoseq.isoseq_require_polya": true,
-  "kinnex_isoseq.pigeon_use_polya": true,
-  "kinnex_isoseq.pigeon_use_cage_peak": true,
-  "kinnex_isoseq.pigeon_use_junction": true,
-  "kinnex_isoseq.isocall_extra_merged_profile": "File? (optional)",
-  "kinnex_isoseq.isocall_min_read_fraction": 0.99,
-  "kinnex_isoseq.isocall_max_bundles_per_gene": 10000,
-  "kinnex_isoseq.isocall_min_reads_per_isoform": 3,
-  "kinnex_isoseq.pigeon_min_ref_length": 100,
+  "kinnex_isoseq.reference_container": "String? (optional)",
+  "kinnex_isoseq.reference_overrides": {
+    "genome_fasta": "File? (optional)",
+    "annotation_gtf_gz": "File? (optional)",
+    "pigeon_poly_a": "File? (optional)",
+    "pigeon_cage_peak_bed": "File? (optional)",
+    "pigeon_junction_coverage": "File? (optional)",
+    "hifi_demux_barcodes": "File? (optional)",
+    "barcoded_primers": "File? (optional)",
+    "skera_adapters": "File? (optional)"
+  },
+  "kinnex_isoseq.kinnex_primers_set": "String? (optional; omission selects 8fold)",
   "kinnex_isoseq.output_prefix": "joint",
   "kinnex_isoseq.backend": "HPC"
 }

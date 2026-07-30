@@ -6,7 +6,11 @@
     "File"
   ],
   "isocall.isocall_extra_merged_profile": "File? (optional)",
-  "isocall.ref_map_file": "File",
+  "isocall.reference_container": "String? (optional)",
+  "isocall.reference_overrides": {
+    "genome_fasta": "File? (optional)",
+    "annotation_gtf_gz": "File? (optional)"
+  },
   "isocall.output_prefix": "joint",
   "isocall.backend": "HPC"
 }

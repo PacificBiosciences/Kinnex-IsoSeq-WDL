@@ -4,8 +4,20 @@ import "../../rna_structs.wdl"
 
 task prepare_pigeon_resources {
   meta {
-    description: "Prepare reference resources for pigeon classification."
+    description: "Prepare the annotation and any enabled, available supplemental resources for pigeon classification."
     outputs: {
+      prepared_pigeon_cage_peak_bed: {
+        description: "Prepared Pigeon CAGE peak BED when enabled and available"
+      },
+      prepared_pigeon_cage_peak_bed_index: {
+        description: "Prepared Pigeon CAGE peak index when enabled and available"
+      },
+      prepared_pigeon_junction_coverage: {
+        description: "Prepared Pigeon junction coverage when enabled and available"
+      },
+      prepared_pigeon_junction_coverage_index: {
+        description: "Prepared Pigeon junction-coverage index when enabled and available"
+      },
       pigeon_resources: {
         description: "Prepared pigeon classification resources"
       }
@@ -23,13 +35,19 @@ task prepare_pigeon_resources {
       description: "Reference FASTA index"
     }
     pigeon_poly_a: {
-      description: "Pigeon polyA resource"
+      description: "Optional Pigeon polyA resource"
     }
     pigeon_cage_peak_bed: {
-      description: "Pigeon CAGE peak BED"
+      description: "Optional Pigeon CAGE peak BED"
     }
     pigeon_junction_coverage: {
-      description: "Pigeon junction coverage"
+      description: "Optional Pigeon junction coverage"
+    }
+    pigeon_use_cage_peak: {
+      description: "Whether to prepare the available CAGE peak resource"
+    }
+    pigeon_use_junction: {
+      description: "Whether to prepare the available junction-coverage resource"
     }
     runtime_attributes: {
       description: "Runtime attribute structure"
@@ -40,43 +58,72 @@ task prepare_pigeon_resources {
     File annotation_gtf_gz
     File genome_fasta
     File genome_fasta_index
-    File pigeon_poly_a
-    File pigeon_cage_peak_bed
-    File pigeon_junction_coverage
+    File? pigeon_poly_a
+    File? pigeon_cage_peak_bed
+    File? pigeon_junction_coverage
+    Boolean pigeon_use_cage_peak = true
+    Boolean pigeon_use_junction = true
     RuntimeAttributes runtime_attributes
   }
 
   Int threads = 1
   Int mem_gb = 8
   Int total_mem_mb = (mem_gb * 1024) + runtime_attributes.add_memory_mb
+  Boolean prepare_pigeon_cage_peak = pigeon_use_cage_peak && defined(pigeon_cage_peak_bed)
+  Boolean prepare_pigeon_junction = pigeon_use_junction && defined(pigeon_junction_coverage)
+  String pigeon_cage_peak_bed_value = select_first([
+    pigeon_cage_peak_bed,
+    ""
+  ])
+  String pigeon_junction_coverage_value = select_first([
+    pigeon_junction_coverage,
+    ""
+  ])
 
   command <<<
     set -euo pipefail
 
     mkdir -p pigeon_reference_inputs
     gzip -dc "~{annotation_gtf_gz}" > pigeon_reference_inputs/annotation.gtf
-    cp "~{pigeon_cage_peak_bed}" pigeon_reference_inputs/cage_peak.bed
-    cp "~{pigeon_junction_coverage}" pigeon_reference_inputs/junction_coverage.tsv
+
+    ~{if prepare_pigeon_cage_peak
+      then "cp \"" + pigeon_cage_peak_bed_value + "\" pigeon_reference_inputs/cage_peak.bed"
+      else ""
+    }
+    ~{if prepare_pigeon_junction
+      then "cp \"" + pigeon_junction_coverage_value + "\" pigeon_reference_inputs/junction_coverage.tsv"
+      else ""
+    }
 
     pigeon prepare \
       --log-level INFO \
       --log-file pigeon.prepare.log \
       pigeon_reference_inputs/annotation.gtf \
-      pigeon_reference_inputs/cage_peak.bed \
-      pigeon_reference_inputs/junction_coverage.tsv
+      ~{if prepare_pigeon_cage_peak
+        then "pigeon_reference_inputs/cage_peak.bed"
+        else ""
+      } \
+      ~{if prepare_pigeon_junction
+        then "pigeon_reference_inputs/junction_coverage.tsv"
+        else ""
+      }
   >>>
 
   output {
+    File? prepared_pigeon_cage_peak_bed = "pigeon_reference_inputs/cage_peak.sorted.bed"
+    File? prepared_pigeon_cage_peak_bed_index = "pigeon_reference_inputs/cage_peak.sorted.bed.pgi"
+    File? prepared_pigeon_junction_coverage = "pigeon_reference_inputs/junction_coverage.sorted.tsv"
+    File? prepared_pigeon_junction_coverage_index = "pigeon_reference_inputs/junction_coverage.sorted.tsv.pgi"
     PigeonResources pigeon_resources = object {
       annotation_gtf: "pigeon_reference_inputs/annotation.sorted.gtf",
       annotation_gtf_pgi: "pigeon_reference_inputs/annotation.sorted.gtf.pgi",
       genome_fasta: genome_fasta,
       genome_fasta_index: genome_fasta_index,
       pigeon_poly_a: pigeon_poly_a,
-      pigeon_cage_peak_bed: "pigeon_reference_inputs/cage_peak.sorted.bed",
-      pigeon_cage_peak_bed_index: "pigeon_reference_inputs/cage_peak.sorted.bed.pgi",
-      pigeon_junction_coverage: "pigeon_reference_inputs/junction_coverage.sorted.tsv",
-      pigeon_junction_coverage_index: "pigeon_reference_inputs/junction_coverage.sorted.tsv.pgi"
+      pigeon_cage_peak_bed: prepared_pigeon_cage_peak_bed,
+      pigeon_cage_peak_bed_index: prepared_pigeon_cage_peak_bed_index,
+      pigeon_junction_coverage: prepared_pigeon_junction_coverage,
+      pigeon_junction_coverage_index: prepared_pigeon_junction_coverage_index
     }
   }
 
@@ -181,13 +228,13 @@ task pigeon_classify_isoforms {
       description: "Prepared pigeon classification resources"
     }
     pigeon_use_polya: {
-      description: "Pass the pigeon polyA resource to pigeon classify"
+      description: "Whether to pass the polyA resource to pigeon classify when the resource is available"
     }
     pigeon_use_cage_peak: {
-      description: "Pass the pigeon CAGE peak resource to pigeon classify"
+      description: "Whether to pass the CAGE peak resource to pigeon classify when the resource is available"
     }
     pigeon_use_junction: {
-      description: "Pass the pigeon junction coverage resource to pigeon classify"
+      description: "Whether to pass the junction-coverage resource to pigeon classify when the resource is available"
     }
     pigeon_min_ref_length: {
       description: "Minimum reference length for pigeon classify"
@@ -225,10 +272,46 @@ task pigeon_classify_isoforms {
     then runtime_attributes.nproc
     else threads
 
+  Boolean effective_pigeon_use_polya = pigeon_use_polya && defined(pigeon_resources.pigeon_poly_a)
+  Boolean effective_pigeon_use_cage_peak = (pigeon_use_cage_peak && defined(pigeon_resources.pigeon_cage_peak_bed) && defined(pigeon_resources.pigeon_cage_peak_bed_index))
+  Boolean effective_pigeon_use_junction = (pigeon_use_junction && defined(pigeon_resources.pigeon_junction_coverage) && defined(pigeon_resources.pigeon_junction_coverage_index))
   String annotation_gtf_basename = basename(pigeon_resources.annotation_gtf)
   String genome_fasta_basename = basename(pigeon_resources.genome_fasta)
-  String pigeon_cage_peak_bed_basename = basename(pigeon_resources.pigeon_cage_peak_bed)
-  String pigeon_junction_coverage_basename = basename(pigeon_resources.pigeon_junction_coverage)
+  String pigeon_poly_a_value = if effective_pigeon_use_polya
+    then select_first([
+      pigeon_resources.pigeon_poly_a
+    ])
+    else ""
+  String pigeon_cage_peak_bed_value = if effective_pigeon_use_cage_peak
+    then select_first([
+      pigeon_resources.pigeon_cage_peak_bed
+    ])
+    else ""
+  String pigeon_cage_peak_bed_index_value = if effective_pigeon_use_cage_peak
+    then select_first([
+      pigeon_resources.pigeon_cage_peak_bed_index
+    ])
+    else ""
+  String pigeon_cage_peak_bed_basename = if effective_pigeon_use_cage_peak
+    then basename(select_first([
+      pigeon_resources.pigeon_cage_peak_bed
+    ]))
+    else ""
+  String pigeon_junction_coverage_value = if effective_pigeon_use_junction
+    then select_first([
+      pigeon_resources.pigeon_junction_coverage
+    ])
+    else ""
+  String pigeon_junction_coverage_index_value = if effective_pigeon_use_junction
+    then select_first([
+      pigeon_resources.pigeon_junction_coverage_index
+    ])
+    else ""
+  String pigeon_junction_coverage_basename = if effective_pigeon_use_junction
+    then basename(select_first([
+      pigeon_resources.pigeon_junction_coverage
+    ]))
+    else ""
 
   command <<<
     set -euo pipefail
@@ -239,30 +322,14 @@ task pigeon_classify_isoforms {
     ln --symbolic "~{pigeon_resources.genome_fasta}" .
     ln --symbolic "~{pigeon_resources.genome_fasta_index}" "~{genome_fasta_basename}.fai"
 
-    if [[ "~{true="true" false="false" pigeon_use_cage_peak}" == "true" ]]; then
-      ln --symbolic "~{pigeon_resources.pigeon_cage_peak_bed}" .
-      ln --symbolic "~{pigeon_resources.pigeon_cage_peak_bed_index}" "~{pigeon_cage_peak_bed_basename}.pgi"
-    fi
-
-    if [[ "~{true="true" false="false" pigeon_use_junction}" == "true" ]]; then
-      ln --symbolic "~{pigeon_resources.pigeon_junction_coverage}" .
-      ln --symbolic "~{pigeon_resources.pigeon_junction_coverage_index}" "~{pigeon_junction_coverage_basename}.pgi"
-    fi
-
-    poly_a_args=()
-    if [[ "~{true="true" false="false" pigeon_use_polya}" == "true" ]]; then
-      poly_a_args=(--poly-a "~{pigeon_resources.pigeon_poly_a}")
-    fi
-
-    cage_peak_args=()
-    if [[ "~{true="true" false="false" pigeon_use_cage_peak}" == "true" ]]; then
-      cage_peak_args=(--cage-peak "~{pigeon_cage_peak_bed_basename}")
-    fi
-
-    junction_args=()
-    if [[ "~{true="true" false="false" pigeon_use_junction}" == "true" ]]; then
-      junction_args=(--coverage "~{pigeon_junction_coverage_basename}")
-    fi
+    ~{if effective_pigeon_use_cage_peak
+      then "ln --symbolic \"" + pigeon_cage_peak_bed_value + "\" .\nln --symbolic \"" + pigeon_cage_peak_bed_index_value + "\" \"" + pigeon_cage_peak_bed_basename + ".pgi\""
+      else ""
+    }
+    ~{if effective_pigeon_use_junction
+      then "ln --symbolic \"" + pigeon_junction_coverage_value + "\" .\nln --symbolic \"" + pigeon_junction_coverage_index_value + "\" \"" + pigeon_junction_coverage_basename + ".pgi\""
+      else ""
+    }
 
     pigeon classify \
       --num-threads "~{effective_threads}" \
@@ -273,9 +340,18 @@ task pigeon_classify_isoforms {
       "~{annotation_gtf_basename}" \
       "~{genome_fasta_basename}" \
       --out-prefix "~{output_prefix}.pigeon" \
-      "${poly_a_args[@]}" \
-      "${cage_peak_args[@]}" \
-      "${junction_args[@]}" \
+      ~{if effective_pigeon_use_polya
+        then "--poly-a \"" + pigeon_poly_a_value + "\""
+        else ""
+      } \
+      ~{if effective_pigeon_use_cage_peak
+        then "--cage-peak \"" + pigeon_cage_peak_bed_basename + "\""
+        else ""
+      } \
+      ~{if effective_pigeon_use_junction
+        then "--coverage \"" + pigeon_junction_coverage_basename + "\""
+        else ""
+      } \
       --min-ref-length "~{pigeon_min_ref_length}"
   >>>
 

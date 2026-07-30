@@ -12,9 +12,6 @@ workflow secondary_analysis_core {
       workflow_name: {
         description: "Workflow name"
       },
-      reference_name: {
-        description: "Reference name"
-      },
       sample_names: {
         description: "Sample names"
       },
@@ -23,9 +20,6 @@ workflow secondary_analysis_core {
       },
       group_sizes: {
         description: "FLNC BAM counts per sample group"
-      },
-      grouped_flnc_bams: {
-        description: "Grouped FLNC BAMs"
       },
       aligned_bams: {
         description: "Aligned FLNC BAMs"
@@ -58,17 +52,32 @@ workflow secondary_analysis_core {
     flnc_bams: {
       description: "FLNC BAMs"
     }
-    ref_map_file: {
-      description: "Reference-map TSV"
+    genome_fasta: {
+      description: "Reference genome FASTA"
+    }
+    genome_fasta_index: {
+      description: "Reference FASTA index"
+    }
+    annotation_gtf_gz: {
+      description: "Compressed annotation GTF"
+    }
+    pigeon_poly_a: {
+      description: "Optional Pigeon polyA motif list"
+    }
+    pigeon_cage_peak_bed: {
+      description: "Optional Pigeon CAGE peak BED"
+    }
+    pigeon_junction_coverage: {
+      description: "Optional Pigeon junction coverage table"
     }
     pigeon_use_polya: {
-      description: "Pass the pigeon polyA resource to pigeon classify"
+      description: "Whether to pass the polyA resource to pigeon classify when the resource is available"
     }
     pigeon_use_cage_peak: {
-      description: "Pass the pigeon CAGE peak resource to pigeon classify"
+      description: "Whether to prepare and pass the CAGE peak resource when it is available"
     }
     pigeon_use_junction: {
-      description: "Pass the pigeon junction coverage resource to pigeon classify"
+      description: "Whether to prepare and pass the junction-coverage resource when it is available"
     }
     isocall_extra_merged_profile: {
       description: "Optional extra merged isocall profile"
@@ -88,11 +97,20 @@ workflow secondary_analysis_core {
     output_prefix: {
       description: "Output prefix"
     }
-    samtools_merge_threads: {
-      description: "CPU threads for samtools merge"
+    pbsamoa_merge_compression: {
+      description: "Compression level for pbsamoa merge"
     }
-    samtools_merge_mem_gb: {
-      description: "Memory allocation in GB for samtools merge"
+    pbsamoa_merge_threads: {
+      description: "CPU threads for pbsamoa merge"
+    }
+    pbsamoa_merge_mem_gb: {
+      description: "Memory allocation in GB for pbsamoa merge"
+    }
+    pbmm2_index_threads: {
+      description: "CPU threads for pbmm2 reference indexing"
+    }
+    pbmm2_index_mem_gb: {
+      description: "Memory allocation in GB for pbmm2 reference indexing"
     }
     pbmm2_align_threads: {
       description: "CPU threads for pbmm2 alignment"
@@ -149,7 +167,12 @@ workflow secondary_analysis_core {
 
   input {
     Array[File] flnc_bams
-    File ref_map_file
+    File genome_fasta
+    File genome_fasta_index
+    File annotation_gtf_gz
+    File? pigeon_poly_a
+    File? pigeon_cage_peak_bed
+    File? pigeon_junction_coverage
     Boolean pigeon_use_polya = true
     Boolean pigeon_use_cage_peak = true
     Boolean pigeon_use_junction = true
@@ -159,10 +182,13 @@ workflow secondary_analysis_core {
     Int isocall_min_reads_per_isoform = 3
     Int pigeon_min_ref_length = 100
     String output_prefix = "joint"
-    Int samtools_merge_threads = 8
-    Int samtools_merge_mem_gb = 32
-    Int pbmm2_align_threads = 16
-    Int pbmm2_align_mem_gb = 48
+    Int pbsamoa_merge_compression = 6
+    Int pbsamoa_merge_threads = 32
+    Int pbsamoa_merge_mem_gb = 16
+    Int pbmm2_index_threads = 8
+    Int pbmm2_index_mem_gb = 32
+    Int pbmm2_align_threads = 32
+    Int pbmm2_align_mem_gb = 64
     Int isocall_profile_threads = 4
     Int isocall_profile_mem_gb = 32
     Int isocall_prep_isoforms_threads = 4
@@ -180,15 +206,15 @@ workflow secondary_analysis_core {
     RuntimeAttributes runtime_attributes
   }
 
-  Map[String, String] reference_mapping = read_map(ref_map_file)
-
   call IsoformClassificationTasks.prepare_pigeon_resources { input:
-    annotation_gtf_gz = reference_mapping["annotation_gtf_gz"],  # !FileCoercion
-    genome_fasta = reference_mapping["genome_fasta"],  # !FileCoercion
-    genome_fasta_index = reference_mapping["genome_fasta_index"],  # !FileCoercion
-    pigeon_poly_a = reference_mapping["pigeon_poly_a"],  # !FileCoercion
-    pigeon_cage_peak_bed = reference_mapping["pigeon_cage_peak_bed"],  # !FileCoercion
-    pigeon_junction_coverage = reference_mapping["pigeon_junction_coverage"],  # !FileCoercion
+    annotation_gtf_gz = annotation_gtf_gz,
+    genome_fasta = genome_fasta,
+    genome_fasta_index = genome_fasta_index,
+    pigeon_poly_a = pigeon_poly_a,
+    pigeon_cage_peak_bed = pigeon_cage_peak_bed,
+    pigeon_junction_coverage = pigeon_junction_coverage,
+    pigeon_use_cage_peak = pigeon_use_cage_peak,
+    pigeon_use_junction = pigeon_use_junction,
     runtime_attributes = runtime_attributes
   }
 
@@ -197,43 +223,65 @@ workflow secondary_analysis_core {
     runtime_attributes = runtime_attributes
   }
 
+  call FlncAlignmentTasks.create_pbmm2_index { input:
+    genome_fasta = genome_fasta,
+    threads = pbmm2_index_threads,
+    mem_gb = pbmm2_index_mem_gb,
+    runtime_attributes = runtime_attributes
+  }
+
   scatter (sample_index in range(length(group_flnc_bams_by_sm.sample_names))) {
-    String sample_name = group_flnc_bams_by_sm.sample_names[sample_index]
     String sample_prefix = group_flnc_bams_by_sm.sample_prefixes[sample_index]
     Array[Int] group_bam_indices = group_flnc_bams_by_sm.group_bam_indices[sample_index]
+    Int group_size = length(group_bam_indices)
 
-    scatter (group_bam_index in group_bam_indices) {
+    scatter (group_position in range(group_size)) {
+      Int group_bam_index = group_bam_indices[group_position]
       File group_flnc_bam = flnc_bams[group_bam_index]
+      String alignment_prefix = if group_size == 1
+        then sample_prefix
+        else "~{sample_prefix}.part-~{group_position}"
+
+      call FlncAlignmentTasks.pbmm2_align_flnc { input:
+        output_prefix = alignment_prefix,
+        flnc_bam = group_flnc_bam,
+        pbmm2_index = create_pbmm2_index.pbmm2_index,
+        threads = pbmm2_align_threads,
+        mem_gb = pbmm2_align_mem_gb,
+        runtime_attributes = runtime_attributes
+      }
     }
 
-    call FlncAlignmentTasks.samtools_merge { input:
-      sample_name = sample_name,
-      sample_prefix = sample_prefix,
-      flnc_bams = group_flnc_bam,
-      threads = samtools_merge_threads,
-      mem_gb = samtools_merge_mem_gb,
-      runtime_attributes = runtime_attributes
+    if (group_size > 1) {
+      call FlncAlignmentTasks.pbsamoa_merge_aligned_bams { input:
+        bams = pbmm2_align_flnc.aligned_bam,
+        out_prefix = sample_prefix,
+        compression = pbsamoa_merge_compression,
+        threads = pbsamoa_merge_threads,
+        mem_gb = pbsamoa_merge_mem_gb,
+        runtime_attributes = runtime_attributes
+      }
     }
 
-    File grouped_flnc_bam = samtools_merge.grouped_flnc_bam
-
-    call FlncAlignmentTasks.pbmm2_align_flnc { input:
-      sample_prefix = sample_prefix,
-      flnc_bam = grouped_flnc_bam,
-      genome_fasta = reference_mapping["genome_fasta"],  # !FileCoercion
-      threads = pbmm2_align_threads,
-      mem_gb = pbmm2_align_mem_gb,
-      runtime_attributes = runtime_attributes
-    }
+    File sample_aligned_bam = if group_size == 1
+      then pbmm2_align_flnc.aligned_bam[0]
+      else select_first([
+        pbsamoa_merge_aligned_bams.merged_bam
+      ])
+    File sample_aligned_bam_index = if group_size == 1
+      then pbmm2_align_flnc.aligned_bam_index[0]
+      else select_first([
+        pbsamoa_merge_aligned_bams.merged_bam_index
+      ])
   }
 
   call IsocallCore.isocall_core as isocall_core { input:
-    aligned_bams = pbmm2_align_flnc.aligned_bam,
-    aligned_bam_bais = pbmm2_align_flnc.aligned_bam_index,
+    aligned_bams = sample_aligned_bam,
+    aligned_bam_bais = sample_aligned_bam_index,
     isocall_extra_merged_profile = isocall_extra_merged_profile,
-    annotation_gtf_gz = reference_mapping["annotation_gtf_gz"],  # !FileCoercion
-    genome_fasta = reference_mapping["genome_fasta"],  # !FileCoercion
-    genome_fasta_index = reference_mapping["genome_fasta_index"],  # !FileCoercion
+    annotation_gtf_gz = annotation_gtf_gz,
+    genome_fasta = genome_fasta,
+    genome_fasta_index = genome_fasta_index,
     runtime_attributes = runtime_attributes,
     isocall_min_read_fraction = isocall_min_read_fraction,
     isocall_max_bundles_per_gene = isocall_max_bundles_per_gene,
@@ -269,13 +317,11 @@ workflow secondary_analysis_core {
 
   output {
     String workflow_name = "secondary_analysis_core"
-    String reference_name = reference_mapping["name"]
     Array[String] sample_names = group_flnc_bams_by_sm.sample_names
     Array[String] sample_prefixes = group_flnc_bams_by_sm.sample_prefixes
     Array[Int] group_sizes = group_flnc_bams_by_sm.group_sizes
-    Array[File] grouped_flnc_bams = grouped_flnc_bam
-    Array[File] aligned_bams = pbmm2_align_flnc.aligned_bam
-    Array[File] aligned_bam_bais = pbmm2_align_flnc.aligned_bam_index
+    Array[File] aligned_bams = sample_aligned_bam
+    Array[File] aligned_bam_bais = sample_aligned_bam_index
     File isocall_isoforms_gtf = isocall_core.isocall_isoforms_gtf
     File isocall_count_matrix = isocall_core.isocall_count_matrix
     File isocall_closest_known = isocall_core.isocall_closest_known

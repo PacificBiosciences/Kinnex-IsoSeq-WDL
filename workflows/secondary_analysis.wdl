@@ -1,6 +1,7 @@
 version 1.0
 
 import "backend_configuration.wdl" as BackendConfiguration
+import "reference_resources/reference_resources.wdl" as ReferenceResources
 import "secondary_analysis/secondary_analysis_core.wdl" as SecondaryAnalysisCore
 
 workflow secondary_analysis {
@@ -13,8 +14,14 @@ workflow secondary_analysis {
       workflow_version: {
         description: "Workflow version"
       },
-      reference_name: {
-        description: "Reference name"
+      reference_container_uri: {
+        description: "Immutable reference-container URI when container defaults were used"
+      },
+      reference_mode: {
+        description: "Reference selection mode: container, hybrid, or custom"
+      },
+      base_resource_bundle_version: {
+        description: "Base container resource-bundle version when container defaults were used"
       },
       sample_names: {
         description: "Sample names"
@@ -24,9 +31,6 @@ workflow secondary_analysis {
       },
       group_sizes: {
         description: "FLNC BAM counts per sample group"
-      },
-      grouped_flnc_bams: {
-        description: "Grouped FLNC BAMs"
       },
       aligned_bams: {
         description: "Aligned FLNC BAMs"
@@ -59,17 +63,20 @@ workflow secondary_analysis {
     flnc_bams: {
       description: "Input FLNC BAMs"
     }
-    ref_map_file: {
-      description: "TSV containing reference genome information for all implemented RNA stages"
+    reference_container: {
+      description: "Optional immutable reference-container URI used for defaults"
+    }
+    reference_overrides: {
+      description: "Typed optional overrides for reference files; a genome override requires an annotation override and disables packaged Pigeon support fallbacks"
     }
     pigeon_use_polya: {
-      description: "Whether to pass the ref_map pigeon_poly_a resource to pigeon classify"
+      description: "Whether to pass the polyA resource to pigeon classify when the resource is available"
     }
     pigeon_use_cage_peak: {
-      description: "Whether to pass the ref_map pigeon_cage_peak_bed resources to pigeon classify"
+      description: "Whether to prepare and pass the CAGE peak resource when it is available"
     }
     pigeon_use_junction: {
-      description: "Whether to pass the ref_map pigeon_junction_coverage resources to pigeon classify"
+      description: "Whether to prepare and pass the junction-coverage resource when it is available"
     }
     isocall_extra_merged_profile: {
       description: "Optional merged profile that will be merged in addition to the generated isocall profiles"
@@ -110,7 +117,9 @@ workflow secondary_analysis {
 
   input {
     Array[File] flnc_bams
-    File ref_map_file
+    String? reference_container
+    ReferenceOverrides reference_overrides = object {
+    }
     Boolean pigeon_use_polya = true
     Boolean pigeon_use_cage_peak = true
     Boolean pigeon_use_junction = true
@@ -125,7 +134,7 @@ workflow secondary_analysis {
     String backend = "HPC"
     Int max_retries = 2
     Int add_memory_mb = 0
-    Int nproc = 16
+    Int nproc = 32
     String? container_registry
   }
 
@@ -139,9 +148,29 @@ workflow secondary_analysis {
 
   RuntimeAttributes default_runtime_attributes = backend_configuration.runtime_attributes
 
+  call ReferenceResources.resolve_reference_resources { input:
+    resolution_profile = "secondary_analysis",
+    reference_container = reference_container,
+    reference_overrides = reference_overrides,
+    runtime_attributes = default_runtime_attributes
+  }
+
+  ResolvedReferenceResources reference_resources = resolve_reference_resources.resources
+
   call SecondaryAnalysisCore.secondary_analysis_core as secondary_analysis_core { input:
     flnc_bams = flnc_bams,
-    ref_map_file = ref_map_file,
+    genome_fasta = select_first([
+      reference_resources.genome_fasta
+    ]),
+    genome_fasta_index = select_first([
+      reference_resources.genome_fasta_index
+    ]),
+    annotation_gtf_gz = select_first([
+      reference_resources.annotation_gtf_gz
+    ]),
+    pigeon_poly_a = reference_resources.pigeon_poly_a,
+    pigeon_cage_peak_bed = reference_resources.pigeon_cage_peak_bed,
+    pigeon_junction_coverage = reference_resources.pigeon_junction_coverage,
     runtime_attributes = default_runtime_attributes,
     pigeon_use_polya = pigeon_use_polya,
     pigeon_use_cage_peak = pigeon_use_cage_peak,
@@ -156,12 +185,13 @@ workflow secondary_analysis {
 
   output {
     String workflow_name = "secondary_analysis"
-    String workflow_version = "0.2.0"
-    String reference_name = secondary_analysis_core.reference_name
+    String workflow_version = "0.3.0"
+    String? reference_container_uri = resolve_reference_resources.reference_container_uri
+    String reference_mode = resolve_reference_resources.reference_mode
+    String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version
     Array[String] sample_names = secondary_analysis_core.sample_names
     Array[String] sample_prefixes = secondary_analysis_core.sample_prefixes
     Array[Int] group_sizes = secondary_analysis_core.group_sizes
-    Array[File] grouped_flnc_bams = secondary_analysis_core.grouped_flnc_bams
     Array[File] aligned_bams = secondary_analysis_core.aligned_bams
     Array[File] aligned_bam_bais = secondary_analysis_core.aligned_bam_bais
     File isocall_isoforms_gtf = secondary_analysis_core.isocall_isoforms_gtf

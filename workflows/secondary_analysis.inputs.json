@@ -2,7 +2,14 @@
   "secondary_analysis.flnc_bams": [
     "File"
   ],
-  "secondary_analysis.ref_map_file": "File",
+  "secondary_analysis.reference_container": "String? (optional)",
+  "secondary_analysis.reference_overrides": {
+    "genome_fasta": "File? (optional)",
+    "annotation_gtf_gz": "File? (optional)",
+    "pigeon_poly_a": "File? (optional)",
+    "pigeon_cage_peak_bed": "File? (optional)",
+    "pigeon_junction_coverage": "File? (optional)"
+  },
   "secondary_analysis.pigeon_use_polya": true,
   "secondary_analysis.pigeon_use_cage_peak": true,
   "secondary_analysis.pigeon_use_junction": true,

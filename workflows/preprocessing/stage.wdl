@@ -1,7 +1,8 @@
 version 1.0
 
-import "lima_tasks.wdl" as Lima
-import "tasks.wdl" as Tasks
+import "tasks/isoseq_refine.wdl" as IsoSeqRefineTasks
+import "tasks/lima.wdl" as Lima
+import "tasks/skera.wdl" as SkeraTasks
 
 workflow preprocessing_stage {
   meta {
@@ -19,8 +20,8 @@ workflow preprocessing_stage {
       flnc_bam_pbis: {
         description: "FLNC BAM PBIs"
       },
-      refine_summary_reports: {
-        description: "isoseq refine filter summary reports"
+      refine_summary_report: {
+        description: "Combined isoseq refine summary report"
       }
     }
   }
@@ -62,11 +63,11 @@ workflow preprocessing_stage {
   }
 
   input {
-    Array[OuterBarcodeHiFiDataset] datasets
+    Array[HiFiDemuxedDataset] datasets
     File skera_adapters
     File barcoded_primers
     Boolean isoseq_require_polya = true
-    Int skera_split_threads = 8
+    Int skera_split_threads = 16
     Int skera_split_mem_gb = 32
     Int cdna_lima_threads = 16
     Int cdna_lima_mem_gb = 64
@@ -76,7 +77,7 @@ workflow preprocessing_stage {
   }
 
   scatter (dataset in datasets) {
-    call Tasks.skera_split_hifi { input:
+    call SkeraTasks.skera_split_hifi { input:
       dataset_name = dataset.dataset_name,
       hifi_bam = dataset.hifi_bam,
       skera_adapters = skera_adapters,
@@ -99,9 +100,15 @@ workflow preprocessing_stage {
       runtime_attributes = runtime_attributes
     }
 
-    scatter (demuxed_bam in cdna_lima.demuxed_bams) {
-      call Tasks.isoseq_refine { input:
+    scatter (demuxed_index in range(length(cdna_lima.demuxed_bams))) {
+      File demuxed_bam = cdna_lima.demuxed_bams[demuxed_index]
+
+      call IsoSeqRefineTasks.isoseq_refine { input:
         dataset_name = dataset.dataset_name,
+        source_dataset_name = dataset.source_dataset_name,
+        hifi_barcode = dataset.hifi_barcode,
+        cdna_barcode = cdna_lima.demuxed_barcode_pairs[demuxed_index],
+        bio_sample = cdna_lima.demuxed_bio_samples[demuxed_index],
         demuxed_bam = demuxed_bam,
         barcoded_primers = barcoded_primers,
         isoseq_require_polya = isoseq_require_polya,
@@ -112,11 +119,16 @@ workflow preprocessing_stage {
     }
   }
 
+  call IsoSeqRefineTasks.gather_isoseq_refine_reports { input:
+    refine_report_rows = flatten(isoseq_refine.serialized_refine_report_row),
+    runtime_attributes = runtime_attributes
+  }
+
   output {
     Array[String] dataset_names = skera_split_hifi.dataset_name_out
     Array[String] flnc_names = flatten(isoseq_refine.flnc_name_out)
     Array[File] flnc_bams = flatten(isoseq_refine.flnc_bam)
     Array[File] flnc_bam_pbis = flatten(isoseq_refine.flnc_bam_pbi)
-    Array[File] refine_summary_reports = flatten(isoseq_refine.filter_summary_report)
+    File refine_summary_report = gather_isoseq_refine_reports.refine_summary_report
   }
 }

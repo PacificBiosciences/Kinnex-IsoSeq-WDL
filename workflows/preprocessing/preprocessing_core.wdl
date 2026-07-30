@@ -3,7 +3,9 @@ version 1.0
 import "../rna_structs.wdl"
 import "hifi_demux.wdl" as HiFiDemux
 import "stage.wdl" as PreProcessing
-import "tasks.wdl" as Tasks
+import "tasks/dataset_xml.wdl" as DatasetXmlTasks
+import "tasks/demux_setup.wdl" as DemuxSetupTasks
+import "tasks/validation.wdl" as ValidationTasks
 
 workflow preprocessing_core {
   meta {
@@ -33,8 +35,8 @@ workflow preprocessing_core {
       flnc_bam_pbis: {
         description: "FLNC BAM PBIs"
       },
-      refine_summary_reports: {
-        description: "isoseq refine filter summary reports"
+      refine_summary_report: {
+        description: "Combined isoseq refine summary report"
       },
       flnc_dataset_xml: {
         description: "FLNC ConsensusReadSet XML"
@@ -120,7 +122,7 @@ workflow preprocessing_core {
     Boolean isoseq_require_polya = true
     Int hifi_demux_lima_threads = 16
     Int hifi_demux_lima_mem_gb = 64
-    Int skera_split_threads = 8
+    Int skera_split_threads = 16
     Int skera_split_mem_gb = 32
     Int cdna_lima_threads = 16
     Int cdna_lima_mem_gb = 64
@@ -131,7 +133,7 @@ workflow preprocessing_core {
 
   scatter (hifi_bam in hifi_bams) {
     File source_hifi_bam_for_validation = hifi_bam
-    String source_dataset_name_for_validation = basename(hifi_bam, ".bam")
+    String source_dataset_name = basename(hifi_bam, ".bam")
     String empty_hifi_bam_barcode = ""
   }
 
@@ -139,9 +141,9 @@ workflow preprocessing_core {
     then empty_hifi_bam_barcode
     else hifi_bam_barcodes
 
-  call Tasks.validate_preprocessing_inputs { input:
+  call ValidationTasks.validate_preprocessing_inputs { input:
     hifi_bams = hifi_bams,
-    source_dataset_names = source_dataset_name_for_validation,
+    source_dataset_names = source_dataset_name,
     hifi_bam_barcodes = hifi_bam_barcodes,
     needs_hifi_demux = needs_hifi_demux,
     biosample_csv = biosample_csv,
@@ -155,7 +157,7 @@ workflow preprocessing_core {
       consensusreadset_xmls
     ])
 
-    call Tasks.validate_consensusreadset_xmls { input:
+    call ValidationTasks.validate_consensusreadset_xmls { input:
       consensusreadset_xmls = defined_consensusreadset_xmls_for_validation,
       source_hifi_bams = source_hifi_bam_for_validation,
       validated_biosample_csv = validate_preprocessing_inputs.validated_biosample_csv,
@@ -168,11 +170,9 @@ workflow preprocessing_core {
     validate_preprocessing_inputs.validated_biosample_csv
   ])
 
-  scatter (i in range(length(hifi_bams))) {
+  if (needs_hifi_demux) {
     call HiFiDemux.hifi_demux { input:
-      hifi_bam = hifi_bams[i],
-      hifi_bam_barcode = hifi_bam_barcodes_for_normalization[i],
-      needs_hifi_demux = needs_hifi_demux,
+      hifi_bam = hifi_bams[0],
       biosample_csv = validated_biosample_csv_for_preprocessing,
       hifi_demux_barcodes = hifi_demux_barcodes,
       expected_hifi_barcode_pairs = validate_preprocessing_inputs.outer_barcode_pairs,
@@ -182,7 +182,31 @@ workflow preprocessing_core {
     }
   }
 
-  Array[OuterBarcodeHiFiDataset] normalized_datasets = flatten(hifi_demux.normalized_datasets)
+  scatter (i in range(length(hifi_bams))) {
+    if (!needs_hifi_demux) {
+      call DemuxSetupTasks.derive_cdna_biosample_csv as derive_cdna_for_passthrough { input:
+        three_col_csv = validated_biosample_csv_for_preprocessing,
+        outer_barcode = hifi_bam_barcodes_for_normalization[i],
+        runtime_attributes = runtime_attributes
+      }
+
+      HiFiDemuxedDataset passthrough_dataset = object {
+        source_dataset_name: source_dataset_name[i],
+        hifi_barcode: hifi_bam_barcodes_for_normalization[i],
+        dataset_name: source_dataset_name[i],
+        hifi_bam: hifi_bams[i],
+        cdna_biosample_csv: derive_cdna_for_passthrough.cdna_biosample_csv,
+        cdna_barcode_pairs: derive_cdna_for_passthrough.cdna_barcode_pairs
+      }
+    }
+  }
+
+  Array[HiFiDemuxedDataset] normalized_datasets = flatten([
+    flatten(select_all([
+      hifi_demux.normalized_datasets
+    ])),
+    select_all(passthrough_dataset)
+  ])
 
   call PreProcessing.preprocessing_stage { input:
     datasets = normalized_datasets,
@@ -206,7 +230,7 @@ workflow preprocessing_core {
       validate_consensusreadset_xmls.collection_contexts
     ])
 
-    call Tasks.populate_flnc_dataset_xml { input:
+    call DatasetXmlTasks.populate_flnc_dataset_xml { input:
       consensusreadset_xml = first_consensusreadset_xml,
       collection_contexts = collection_contexts,
       validated_biosample_csv = validated_biosample_csv_for_preprocessing,
@@ -218,14 +242,18 @@ workflow preprocessing_core {
 
   output {
     String workflow_name = "preprocessing_core"
-    Array[String] source_dataset_names = hifi_demux.source_dataset_name
+    Array[String] source_dataset_names = source_dataset_name
     Array[String] dataset_names = preprocessing_stage.dataset_names
-    Array[File] hifi_demux_datasets = flatten(hifi_demux.demuxed_hifi_datasets)
-    Array[File] hifi_demux_bams = flatten(hifi_demux.demuxed_hifi_bams)
+    Array[File] hifi_demux_datasets = flatten(select_all([
+      hifi_demux.demuxed_hifi_datasets
+    ]))
+    Array[File] hifi_demux_bams = flatten(select_all([
+      hifi_demux.demuxed_hifi_bams
+    ]))
     Array[String] flnc_names = preprocessing_stage.flnc_names
     Array[File] flnc_bams = preprocessing_stage.flnc_bams
     Array[File] flnc_bam_pbis = preprocessing_stage.flnc_bam_pbis
-    Array[File] refine_summary_reports = preprocessing_stage.refine_summary_reports
+    File refine_summary_report = preprocessing_stage.refine_summary_report
     File? flnc_dataset_xml = populate_flnc_dataset_xml.flnc_dataset_xml
     Array[File]? flnc_child_dataset_xmls = populate_flnc_dataset_xml.child_flnc_dataset_xmls
     Array[File]? flnc_dataset_bams = populate_flnc_dataset_xml.packaged_flnc_bams
