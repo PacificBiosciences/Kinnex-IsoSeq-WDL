@@ -220,7 +220,7 @@ task pbsamoa_merge_aligned_bams {
     String out_prefix
     Int compression = 6
     Int threads = 32
-    Int mem_gb = 16
+    Int mem_gb = 32
     RuntimeAttributes runtime_attributes
   }
 
