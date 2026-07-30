@@ -1,15 +1,12 @@
 version 1.0
 
-import "lima_tasks.wdl" as Lima
-import "tasks.wdl" as Tasks
+import "tasks/demux_setup.wdl" as DemuxSetupTasks
+import "tasks/lima.wdl" as Lima
 
 workflow hifi_demux {
   meta {
-    description: "Normalize one preprocessing source dataset by optionally running upstream HiFi demux and returning downstream preprocessing datasets. Upstream HiFi demux uses barcode-file naming, while the 3-column biosample CSV is used to derive the per-outer cDNA biosample CSVs."
+    description: "Run upstream HiFi demux for one preprocessing source dataset and return downstream preprocessing datasets. HiFi demux uses barcode-file naming, while the 3-column biosample CSV is used to derive the per-outer cDNA biosample CSVs."
     outputs: {
-      source_dataset_name: {
-        description: "Source dataset name"
-      },
       normalized_datasets: {
         description: "Normalized outer-barcode HiFi datasets"
       },
@@ -25,12 +22,6 @@ workflow hifi_demux {
   parameter_meta {
     hifi_bam: {
       description: "Input HiFi BAM"
-    }
-    hifi_bam_barcode: {
-      description: "HiFi BAM barcode pair"
-    }
-    needs_hifi_demux: {
-      description: "Run upstream HiFi demux"
     }
     biosample_csv: {
       description: "Biosample CSV"
@@ -54,8 +45,6 @@ workflow hifi_demux {
 
   input {
     File hifi_bam
-    String hifi_bam_barcode
-    Boolean needs_hifi_demux
     File biosample_csv
     File hifi_demux_barcodes
     Array[String] expected_hifi_barcode_pairs
@@ -66,73 +55,52 @@ workflow hifi_demux {
 
   String source_dataset_label = basename(hifi_bam, ".bam")
 
-  if (needs_hifi_demux) {
-    call Lima.run_lima { input:
-      bam = hifi_bam,
-      barcode_file = hifi_demux_barcodes,
-      split_named = true,
-      hifi_preset = "SYMMETRIC-ADAPTERS",
-      store_unbarcoded = true,
-      ignore_xml_biosamples = true,
-      output_missing_pairs = true,
-      emit_dataset_xml = true,
-      output_prefix = source_dataset_label,
-      expected_barcode_pairs = expected_hifi_barcode_pairs,
-      threads = hifi_demux_lima_threads,
-      mem_gb = hifi_demux_lima_mem_gb,
-      runtime_attributes = runtime_attributes
-    }
-
-    scatter (demuxed_hifi_bam in run_lima.demuxed_bams) {
-      String demuxed_hifi_name = basename(demuxed_hifi_bam, ".bam")
-      String barcode_pair = sub(demuxed_hifi_name, "^.*\\.", "")
-      String normalized_dataset_name = source_dataset_label + "." + barcode_pair
-
-      call Tasks.derive_cdna_biosample_csv as derive_cdna_for_demuxed { input:
-        three_col_csv = biosample_csv,
-        outer_barcode = barcode_pair,
-        runtime_attributes = runtime_attributes
-      }
-
-      OuterBarcodeHiFiDataset normalized_dataset = object {
-        dataset_name: normalized_dataset_name,
-        hifi_bam: demuxed_hifi_bam,
-        cdna_biosample_csv: derive_cdna_for_demuxed.cdna_biosample_csv,
-        cdna_barcode_pairs: derive_cdna_for_demuxed.cdna_barcode_pairs
-      }
-    }
+  call DemuxSetupTasks.derive_hifi_demux_biosample_csv { input:
+    three_col_csv = biosample_csv,
+    runtime_attributes = runtime_attributes
   }
 
-  if (!needs_hifi_demux) {
-    call Tasks.derive_cdna_biosample_csv as derive_cdna_for_passthrough { input:
+  call Lima.run_lima { input:
+    bam = hifi_bam,
+    barcode_file = hifi_demux_barcodes,
+    biosample_csv = derive_hifi_demux_biosample_csv.hifi_demux_biosample_csv,
+    split_named = true,
+    hifi_preset = "SYMMETRIC-ADAPTERS",
+    store_unbarcoded = true,
+    ignore_xml_biosamples = true,
+    output_missing_pairs = true,
+    emit_dataset_xml = true,
+    output_prefix = source_dataset_label,
+    expected_barcode_pairs = expected_hifi_barcode_pairs,
+    threads = hifi_demux_lima_threads,
+    mem_gb = hifi_demux_lima_mem_gb,
+    runtime_attributes = runtime_attributes
+  }
+
+  scatter (demuxed_hifi_bam in run_lima.demuxed_bams) {
+    String demuxed_hifi_name = basename(demuxed_hifi_bam, ".bam")
+    String barcode_pair = sub(demuxed_hifi_name, "^.*\\.", "")
+    String normalized_dataset_name = source_dataset_label + "." + barcode_pair
+
+    call DemuxSetupTasks.derive_cdna_biosample_csv as derive_cdna_for_demuxed { input:
       three_col_csv = biosample_csv,
-      outer_barcode = hifi_bam_barcode,
+      outer_barcode = barcode_pair,
       runtime_attributes = runtime_attributes
     }
 
-    OuterBarcodeHiFiDataset passthrough_dataset = object {
-      dataset_name: source_dataset_label,
-      hifi_bam: hifi_bam,
-      cdna_biosample_csv: derive_cdna_for_passthrough.cdna_biosample_csv,
-      cdna_barcode_pairs: derive_cdna_for_passthrough.cdna_barcode_pairs
+    HiFiDemuxedDataset normalized_dataset = object {
+      source_dataset_name: source_dataset_label,
+      hifi_barcode: barcode_pair,
+      dataset_name: normalized_dataset_name,
+      hifi_bam: demuxed_hifi_bam,
+      cdna_biosample_csv: derive_cdna_for_demuxed.cdna_biosample_csv,
+      cdna_barcode_pairs: derive_cdna_for_demuxed.cdna_barcode_pairs
     }
   }
 
   output {
-    String source_dataset_name = source_dataset_label
-    Array[OuterBarcodeHiFiDataset] normalized_datasets = flatten([
-      select_all([
-        passthrough_dataset
-      ]),
-      flatten(select_all([
-        normalized_dataset
-      ]))
-    ])
-    Array[File] demuxed_hifi_datasets = flatten(select_all([
-      run_lima.demuxed_datasets
-    ]))
-    Array[File] demuxed_hifi_bams = flatten(select_all([
-      run_lima.demuxed_bams
-    ]))
+    Array[HiFiDemuxedDataset] normalized_datasets = normalized_dataset
+    Array[File] demuxed_hifi_datasets = run_lima.demuxed_datasets
+    Array[File] demuxed_hifi_bams = run_lima.demuxed_bams
   }
 }

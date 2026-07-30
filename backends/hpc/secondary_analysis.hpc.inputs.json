@@ -3,7 +3,7 @@
     "<local_path_prefix>/datasets/day0-rep1/flnc.bam",
     "<local_path_prefix>/datasets/day0-rep2/flnc.bam"
   ],
-  "secondary_analysis.ref_map_file": "<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38.ref_map.v0p1p0.hpc.tsv",
+  "secondary_analysis.reference_container": "quay.io/pacbio/workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:8e317498d715c1be48d64987685336763b729e91ebd213aeb3a3455b8b3690ac",
   "secondary_analysis.output_prefix": "joint",
   "secondary_analysis.backend": "HPC"
 }

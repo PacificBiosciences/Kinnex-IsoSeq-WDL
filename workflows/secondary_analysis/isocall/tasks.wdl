@@ -280,12 +280,16 @@ task isocall_call {
   command <<<
     set -euo pipefail
 
+    # isocall expects the FASTA index next to the reference as <reference>.fai.
+    ln --symbolic "~{genome_fasta}" "reference.fa"
+    ln --symbolic "~{genome_fasta_index}" "reference.fa.fai"
+
     isocall call \
       --merged-profile "~{merged_profile}" \
       --threads "~{effective_threads}" \
       --known-isoforms "~{known_isoforms_model}" \
       --output-prefix "~{output_prefix}" \
-      --reference "~{genome_fasta}" \
+      --reference "reference.fa" \
       --min-read-fraction "~{isocall_min_read_fraction}" \
       --max-bundles-per-gene "~{isocall_max_bundles_per_gene}" \
       --min-reads-per-isoform "~{isocall_min_reads_per_isoform}" \

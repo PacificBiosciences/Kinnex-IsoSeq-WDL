@@ -1,7 +1,0 @@
-name	GRCh38
-annotation_gtf_gz	<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38/annotation/gencode.v49.annotation.gtf.gz
-genome_fasta	<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38/human_GRCh38_no_alt_analysis_set.fasta
-genome_fasta_index	<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38/human_GRCh38_no_alt_analysis_set.fasta.fai
-pigeon_poly_a	<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38/classification/polyA.list.txt
-pigeon_cage_peak_bed	<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38/classification/refTSS_v3.3_human_coordinate.hg38.sorted.bed
-pigeon_junction_coverage	<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/GRCh38/classification/intropolis.v1.hg19_with_liftover_to_hg38.tsv.min_count_10.modified2.sorted.tsv

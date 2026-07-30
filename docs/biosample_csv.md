@@ -5,6 +5,10 @@ The `biosample_csv` input is the preprocessing sample sheet used by
 outer SMRTbell barcode and cDNA Barcode combination to the biological sample
 name that should be written to the final FLNC BAM `SM` tag.
 
+The checked-in
+[biosamples.example.csv](../backends/hpc/biosamples.example.csv) is provided
+next to the public HPC input templates as a starting point.
+
 The biosample CSV shall be in CSV format with column headers `HiFi Barcode`,
 `cDNA Barcode`, and `Bio Sample`, written as the exact three-column header:
 
@@ -49,7 +53,7 @@ those values into filename prefixes.
 ## Run modes
 
 In HiFi demux mode, the workflow runs upstream HiFi demux first. Each component
-of every `HiFi Barcode` pair must appear in `hifi_demux_barcodes`, and the full
+of every `HiFi Barcode` pair must appear in the `hifi_demux_barcodes`, and the full
 pair must match the outer-barcode name produced by `lima --split-named`.
 Because the workflow uses the symmetric-adapter HiFi demux preset, each
 `HiFi Barcode` pair in this mode must use the same barcode on both sides, such
@@ -59,11 +63,11 @@ must omit `hifi_barcode`.
 In cDNA demux-only mode, each input BAM is treated as already demuxed on
 instrument. Every `hifi_sources` entry must contain `hifi_barcode`. Each value
 must match a `HiFi Barcode` value in `biosample_csv` and each component must
-appear in `hifi_demux_barcodes`. Multiple source BAMs may use the same barcode
+appear in the `hifi_demux_barcodes`. Multiple source BAMs may use the same barcode
 pair, for example when the same barcode set was reused across movies or runs.
 
 For both modes, each component of every `cDNA Barcode` pair is checked against
-the FASTA record names in `barcoded_primers`.
+the FASTA record names in the `barcoded_primers`.
 
 ## Derived cDNA biosample CSVs
 
@@ -137,7 +141,10 @@ bcU0001_5p--bcU0001_3p,sample_1
 
 The repeated `sample_1` assignment is allowed because it occurs under different
 outer barcodes. Those FLNC BAMs will carry the same `SM` value and can be merged
-later during FLNC alignment.
+later during FLNC alignment. The combined `isoseq refine` report keeps one row
+per technical partition and shows `Bio Sample`, source dataset, HiFi barcode,
+and cDNA barcode as separate columns, so repeated biological sample names
+remain unambiguous without being rewritten.
 
 ### Repeated samples across outer barcodes
 
@@ -170,13 +177,13 @@ would include rows like:
 
 ```tsv
 sample_name sample_prefix group_size action input_bam
-sample_1 sample_1 2 merge m21003...bcM0001--bcM0001.IsoSeqX_bc01_5p--IsoSeqX_3p.flnc.bam
-sample_1 sample_1 2 merge m21003...bcM0002--bcM0002.IsoSeqX_bc01_5p--IsoSeqX_3p.flnc.bam
-sample_2 sample_2 2 merge m21003...bcM0001--bcM0001.IsoSeqX_bc02_5p--IsoSeqX_3p.flnc.bam
-sample_2 sample_2 2 merge m21003...bcM0002--bcM0002.IsoSeqX_bc02_5p--IsoSeqX_3p.flnc.bam
+sample_1 sample_1 2 align_then_merge m21003...bcM0001--bcM0001.IsoSeqX_bc01_5p--IsoSeqX_3p.flnc.bam
+sample_1 sample_1 2 align_then_merge m21003...bcM0002--bcM0002.IsoSeqX_bc01_5p--IsoSeqX_3p.flnc.bam
+sample_2 sample_2 2 align_then_merge m21003...bcM0001--bcM0001.IsoSeqX_bc02_5p--IsoSeqX_3p.flnc.bam
+sample_2 sample_2 2 align_then_merge m21003...bcM0002--bcM0002.IsoSeqX_bc02_5p--IsoSeqX_3p.flnc.bam
 ```
 
-Every sample group is materialized with `samtools merge` into a single
-`<sample_prefix>.flnc.bam`, including one-BAM groups. Each grouped sample is
-then aligned once with `pbmm2`, producing outputs such as
+Each input FLNC BAM is aligned independently with `pbmm2` against the shared
+ISOSEQ reference index. Multi-BAM sample groups are then merged with `pbsamoa`
+into one coordinate-sorted aligned BAM and BAI. Final sample outputs include
 `sample_1.aligned.bam`, `sample_2.aligned.bam`, and `sample_3.aligned.bam`.

@@ -1,6 +1,6 @@
 version 1.0
 
-import "../rna_structs.wdl"
+import "../../rna_structs.wdl"
 
 task run_lima {
   meta {
@@ -11,6 +11,12 @@ task run_lima {
       },
       demuxed_datasets: {
         description: "Demuxed ConsensusReadSet XMLs"
+      },
+      demuxed_barcode_pairs: {
+        description: "Barcode pairs for demuxed BAMs"
+      },
+      demuxed_bio_samples: {
+        description: "Bio Sample names for demuxed BAMs"
       },
       unbarcoded_bams: {
         description: "Unbarcoded BAMs"
@@ -133,7 +139,14 @@ task run_lima {
       "~{expected_barcode_pairs_file}" \
       "~{output_prefix}" \
       "~{emit_dataset_xml}" \
-      "~{store_unbarcoded}" <<'PY'
+      "~{store_unbarcoded}" \
+      ~{if defined(biosample_csv)
+        then "'" + select_first([
+          biosample_csv
+        ]) + "'"
+        else "''"
+      } <<'PY'
+    import csv
     import os
     import sys
 
@@ -142,6 +155,7 @@ task run_lima {
         output_prefix,
         emit_dataset_xml_raw,
         store_unbarcoded_raw,
+        biosample_csv,
     ) = sys.argv[1:]
     emit_dataset_xml = emit_dataset_xml_raw == 'true'
     store_unbarcoded = store_unbarcoded_raw == 'true'
@@ -161,6 +175,39 @@ task run_lima {
             out_fh.writelines(value + '\n' for value in values)
 
 
+    def read_biosample_mapping(path):
+        if not path:
+            return {}
+
+        expected_header = ('Barcodes', 'Bio Sample')
+        mapping = {}
+        with open(path, 'r', newline='', encoding='utf-8-sig') as fh:
+            reader = csv.reader(fh)
+            try:
+                header = tuple(cell.strip() for cell in next(reader))
+            except StopIteration:
+                fail(f'{path} is empty')
+            if header != expected_header:
+                fail(f'{path} has header {header!r}; expected {expected_header!r}')
+
+            for line_no, raw_row in enumerate(reader, start=2):
+                row = [cell.strip() for cell in raw_row]
+                if not row or all(cell == '' for cell in row):
+                    continue
+                if len(row) != 2:
+                    fail(f'{path}:{line_no}: expected 2 columns, got {len(row)}')
+                barcode_pair, bio_sample = row
+                if not barcode_pair or not bio_sample:
+                    fail(f'{path}:{line_no}: empty field in row {raw_row!r}')
+                if barcode_pair in mapping:
+                    fail(f'{path}:{line_no}: duplicate barcode pair {barcode_pair!r}')
+                mapping[barcode_pair] = bio_sample
+
+        if not mapping:
+            fail(f'{path} has no data rows')
+        return mapping
+
+
     expected_barcode_pairs = read_lines(expected_barcode_pairs_file)
     if not expected_barcode_pairs:
         fail('expected_barcode_pairs must contain at least one barcode pair')
@@ -171,12 +218,24 @@ task run_lima {
     if duplicates:
         fail('expected_barcode_pairs contains duplicates: ' + ', '.join(duplicates))
 
+    bio_sample_by_barcode = read_biosample_mapping(biosample_csv)
+    if bio_sample_by_barcode:
+        missing_bio_samples = sorted(set(expected_barcode_pairs) - set(bio_sample_by_barcode))
+        unexpected_bio_samples = sorted(set(bio_sample_by_barcode) - set(expected_barcode_pairs))
+        if missing_bio_samples or unexpected_bio_samples:
+            fail(
+                'biosample CSV barcode pairs do not match expected_barcode_pairs: '
+                f'missing={missing_bio_samples!r}, unexpected={unexpected_bio_samples!r}'
+            )
+
     observed_files = {
         os.path.join('demux', path) for path in os.listdir('demux') if os.path.isfile(os.path.join('demux', path))
     }
     allowed_files = set()
     demuxed_bams = []
     demuxed_datasets = []
+    demuxed_barcode_pairs = []
+    demuxed_bio_samples = []
 
     aggregate_dataset_xml = os.path.join(
         'demux',
@@ -215,6 +274,9 @@ task run_lima {
             )
         if has_bam:
             demuxed_bams.append(demuxed_bam)
+            demuxed_barcode_pairs.append(barcode_pair)
+            if bio_sample_by_barcode:
+                demuxed_bio_samples.append(bio_sample_by_barcode[barcode_pair])
         if has_dataset:
             demuxed_datasets.append(demuxed_dataset)
 
@@ -239,10 +301,17 @@ task run_lima {
         path for path in observed_files - allowed_files if path.endswith('.bam') or path.endswith('.consensusreadset.xml')
     )
     if unexpected_files:
-        fail('lima produced unexpected demux outputs: ' + ', '.join(unexpected_files))
+        print(
+            'WARNING: lima produced unexpected demux outputs; '
+            'excluding them from downstream manifests: '
+            + ', '.join(unexpected_files),
+            file=sys.stderr,
+        )
 
     write_manifest('demuxed_bams.txt', demuxed_bams)
     write_manifest('demuxed_datasets.txt', demuxed_datasets)
+    write_manifest('demuxed_barcode_pairs.txt', demuxed_barcode_pairs)
+    write_manifest('demuxed_bio_samples.txt', demuxed_bio_samples)
     write_manifest('unbarcoded_bams.txt', unbarcoded_bams)
     PY
   >>>
@@ -250,6 +319,8 @@ task run_lima {
   output {
     Array[File] demuxed_bams = read_lines("demuxed_bams.txt")
     Array[File] demuxed_datasets = read_lines("demuxed_datasets.txt")
+    Array[String] demuxed_barcode_pairs = read_lines("demuxed_barcode_pairs.txt")
+    Array[String] demuxed_bio_samples = read_lines("demuxed_bio_samples.txt")
     Array[File] unbarcoded_bams = read_lines("unbarcoded_bams.txt")
   }
 

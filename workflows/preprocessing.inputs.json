@@ -10,9 +10,13 @@
     }
   ],
   "preprocessing.biosample_csv": "File",
-  "preprocessing.hifi_demux_barcodes": "File",
-  "preprocessing.skera_adapters": "File",
-  "preprocessing.barcoded_primers": "File",
+  "preprocessing.reference_container": "String? (optional)",
+  "preprocessing.reference_overrides": {
+    "hifi_demux_barcodes": "File? (optional)",
+    "barcoded_primers": "File? (optional)",
+    "skera_adapters": "File? (optional)"
+  },
+  "preprocessing.kinnex_primers_set": "String? (optional; omission selects 8fold)",
   "preprocessing.isoseq_require_polya": true,
   "preprocessing.backend": "HPC"
 }

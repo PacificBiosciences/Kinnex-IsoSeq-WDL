@@ -55,9 +55,11 @@ To set up Sprocket, either download a release binary from
 toolchain to build it yourself. For example, with Cargo:
 
 ```bash
-cargo install sprocket --version 0.27.0 --locked
+cargo install sprocket --version 0.28.0 --locked
 sprocket --version
 ```
+
+Building Sprocket 0.28.0 with Cargo requires Rust 1.95 or newer.
 
 ### Cromwell
 
@@ -97,10 +99,9 @@ Keep the following setting enabled:
 allow_any_input = true
 ```
 
-The workflows use [reference-map TSV files](./ref_map.md) that name files
-consumed by tasks. Those referenced files are not always listed directly as
-top-level workflow inputs, so `miniwdl` needs `allow_any_input = true` to
-localize them.
+Public and internal examples may use input files from shared locations outside
+the workflow run directory, so the maintained miniwdl configuration keeps
+`allow_any_input = true`.
 
 ### Sprocket
 
@@ -120,6 +121,7 @@ minimum, review these settings:
 - `[run] output_dir`: Sprocket run output directory.
 - `[server.database] url`: Sprocket SQLite provenance database for run records.
 - `[run.task] cache_dir`: Sprocket task call-cache directory.
+- `[run.task] digests`: content-digest strategy used for task call caching.
 - `[run.http] cache_dir`: Sprocket HTTP download cache directory.
 - `[run.backends.default] default_slurm_partition.name`: default Slurm
   partition for workflow tasks.
@@ -139,14 +141,19 @@ formats are engine-specific and should not be shared between engines.
 
 The public Sprocket template enables task call caching by default. Review
 `[run.task] cache_dir` before running so repeat or resumed runs use a cache
-location that is visible from the submit host and compute nodes.
+location that is visible from the submit host and compute nodes. It uses
+`digests = "strongish"`, which hashes file metadata and the first 10 MiB of
+each file to improve cache invalidation without fully hashing large input
+files.
 
 Note that the Sprocket Slurm/Apptainer backend currently requires experimental
 execution features, these are enabled with
 `experimental_features_enabled = true`.
 
-Reference-map paths and all input files must be visible from the submit host
-and compute nodes through the same shared filesystem paths.
+All filesystem inputs, including typed reference overrides, must be visible
+from the submit host and compute nodes through the same shared paths. When a
+reference container supplies any defaults, compute nodes must also be able to
+authenticate to and pull it.
 
 ### Cromwell
 
@@ -174,27 +181,28 @@ HPC templates live under [backends/hpc](../backends/hpc):
 - [backends/hpc/kinnex_isoseq.from_instrument_demux.hpc.inputs.json](../backends/hpc/kinnex_isoseq.from_instrument_demux.hpc.inputs.json)
 - [backends/hpc/preprocessing.hpc.inputs.json](../backends/hpc/preprocessing.hpc.inputs.json)
 - [backends/hpc/secondary_analysis.hpc.inputs.json](../backends/hpc/secondary_analysis.hpc.inputs.json)
-- [backends/hpc/GRCh38.ref_map.v0p1p0.hpc.tsv](../backends/hpc/GRCh38.ref_map.v0p1p0.hpc.tsv)
+- [backends/hpc/biosamples.example.csv](../backends/hpc/biosamples.example.csv),
+  an example sample sheet for preprocessing and end-to-end runs
 
 Copy the matching `.hpc.inputs.json` template and replace every
-`<local_path_prefix>` placeholder with paths visible from the Slurm jobs. The
-GRCh38 resource bundle is expected at
-`<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/`. Copy and edit
-`GRCh38.ref_map.v0p1p0.hpc.tsv` into the extracted bundle so its reference,
-annotation, and classification resource paths point to files on your HPC
-filesystem. See [the reference-map specification](./ref_map.md) for the required
-keys and the [resource bundle layout](./resource_bundle.md) for the package
-directory structure.
+`<local_path_prefix>` placeholder with paths visible from the Slurm jobs.
+The HPC templates demonstrate container-only reference resolution and pin the
+immutable reference container published for the workflow release. The URI ends
+in a lowercase 64-character `@sha256:` digest; compute nodes need registry
+access. For hybrid or fully custom references, add the typed
+`reference_overrides` object and omit the container only after supplying every
+resource required by the entrypoint. See the
+[reference-resource contract](./reference_container.md).
 
 For `preprocessing` or `kinnex_isoseq` runs, prepare the
-[`biosample_csv`](./biosample_csv.md) sample sheet for your run. The default
-Kinnex resources are bundled and are referenced directly by the public HPC templates:
-
-| Input | Bundle path |
-| --- | --- |
-| `hifi_demux_barcodes` | `kinnex/kinnex_hifi_barcodes/kinnex_hifi_barcodes.fasta` |
-| `skera_adapters` | `kinnex/kinnex_primers/kinnex_8fold_primers.fasta` |
-| `barcoded_primers` | `kinnex/isoseq_v2_barcoded_primers/IsoSeq_v2_primers_12.fasta` |
+[`biosample_csv`](./biosample_csv.md) sample sheet for your run. The checked-in
+[`biosamples.example.csv`](../backends/hpc/biosamples.example.csv) provides a
+starting point. Set optional `kinnex_primers_set` to `8fold`, `12fold`, or
+`16fold` to
+select a packaged Kinnex primer/Skera adapter FASTA; omission selects `8fold`. Alternatively, provide a
+compatible custom adapter FASTA through `reference_overrides.skera_adapters`.
+Supplying both is an error. Each preprocessing resource is resolved from its
+typed override or the reference container.
 
 For the end-to-end `kinnex_isoseq` workflow, choose the mode-specific template:
 use `kinnex_isoseq.no_instrument_demux.hpc.inputs.json` for one raw HiFi BAM that still
@@ -208,6 +216,8 @@ per task when submitting jobs to the compute backend. Optionally set
 `container_registry` in your input JSON if your site mirrors registry-relative
 PacBio images to a different registry; omit it to use `"quay.io/pacbio"`. Do
 not add per-task Docker or resource blocks to the public templates.
+`container_registry` does not rewrite `reference_container` or filesystem
+override paths.
 
 Review the [tools and containers](./tools_containers.md) documentation before
 executing pure-container runs.

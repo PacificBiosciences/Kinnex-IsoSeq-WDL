@@ -9,9 +9,8 @@
       "hifi_barcode": "bcM0002--bcM0002"
     }
   ],
-  "preprocessing.biosample_csv": "<local_path_prefix>/samples/biosample.csv",
-  "preprocessing.hifi_demux_barcodes": "<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/kinnex/kinnex_hifi_barcodes/kinnex_hifi_barcodes.fasta",
-  "preprocessing.skera_adapters": "<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/kinnex/kinnex_primers/kinnex_8fold_primers.fasta",
-  "preprocessing.barcoded_primers": "<local_path_prefix>/kinnex-isoseq-wdl-resources-v0.1.0/kinnex/isoseq_v2_barcoded_primers/IsoSeq_v2_primers_12.fasta",
+  "preprocessing.biosample_csv": "<local_path_prefix>/samples/biosamples.csv",
+  "preprocessing.reference_container": "quay.io/pacbio/workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:8e317498d715c1be48d64987685336763b729e91ebd213aeb3a3455b8b3690ac",
+  "preprocessing.kinnex_primers_set": "8fold",
   "preprocessing.backend": "HPC"
 }

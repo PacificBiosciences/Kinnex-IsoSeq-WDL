@@ -36,7 +36,7 @@ workflow backend_configuration {
     String backend = "HPC"
     Int max_retries = 2
     Int add_memory_mb = 0
-    Int nproc = 16
+    Int nproc = 32
     String? container_registry
   }
 

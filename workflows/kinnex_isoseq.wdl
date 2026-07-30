@@ -2,6 +2,7 @@ version 1.0
 
 import "backend_configuration.wdl" as BackendConfiguration
 import "preprocessing/preprocessing_core.wdl" as PreprocessingCore
+import "reference_resources/reference_resources.wdl" as ReferenceResources
 import "secondary_analysis/secondary_analysis_core.wdl" as SecondaryAnalysisCore
 
 workflow kinnex_isoseq {
@@ -20,8 +21,14 @@ workflow kinnex_isoseq {
       secondary_analysis_workflow_name: {
         description: "Secondary analysis workflow name"
       },
-      reference_name: {
-        description: "Reference name"
+      reference_container_uri: {
+        description: "Immutable reference-container URI when container defaults were used"
+      },
+      reference_mode: {
+        description: "Reference selection mode: container, hybrid, or custom"
+      },
+      base_resource_bundle_version: {
+        description: "Base container resource-bundle version when container defaults were used"
       },
       source_dataset_names: {
         description: "Source dataset names"
@@ -44,8 +51,8 @@ workflow kinnex_isoseq {
       flnc_bam_pbis: {
         description: "FLNC BAM PBIs"
       },
-      refine_summary_reports: {
-        description: "isoseq refine filter summary reports"
+      refine_summary_report: {
+        description: "Combined isoseq refine summary report"
       },
       flnc_dataset_xml: {
         description: "FLNC ConsensusReadSet XML"
@@ -67,9 +74,6 @@ workflow kinnex_isoseq {
       },
       group_sizes: {
         description: "FLNC BAM counts per sample group"
-      },
-      grouped_flnc_bams: {
-        description: "Grouped FLNC BAMs"
       },
       aligned_bams: {
         description: "Aligned FLNC BAMs"
@@ -105,47 +109,22 @@ workflow kinnex_isoseq {
     biosample_csv: {
       description: "Shared 3-column biosample CSV with header `HiFi Barcode,cDNA Barcode,Bio Sample`"
     }
-    hifi_demux_barcodes: {
-      description: "SMRTbell barcode FASTA used by optional upstream HiFi demux and barcode validation"
+    reference_container: {
+      description: "Optional immutable reference-container URI used for defaults"
     }
-    skera_adapters: {
-      description: "Adapter FASTA for skera split"
+    reference_overrides: {
+      description: "Typed optional overrides for reference files; a genome override requires an annotation override and disables packaged Pigeon support fallbacks"
     }
-    barcoded_primers: {
-      description: "Primer FASTA shared by lima and isoseq refine"
+    kinnex_primers_set: {
+      description: "Optional Kinnex primer set used to select the packaged Skera adapter FASTA when no custom override is supplied; omission selects 8fold",
+      choices: [
+        "8fold",
+        "12fold",
+        "16fold"
+      ]
     }
     consensusreadset_xmls: {
       description: "SMRT Link/internal metadata: optional input ConsensusReadSet XMLs for FLNC dataset XML generation."
-    }
-    ref_map_file: {
-      description: "TSV containing reference genome information for FLNC alignment, isocall, and isoform classification"
-    }
-    isoseq_require_polya: {
-      description: "Pass --require-polya to isoseq refine"
-    }
-    pigeon_use_polya: {
-      description: "Whether to pass the ref_map pigeon_poly_a resource to pigeon classify"
-    }
-    pigeon_use_cage_peak: {
-      description: "Whether to pass the ref_map pigeon_cage_peak_bed resources to pigeon classify"
-    }
-    pigeon_use_junction: {
-      description: "Whether to pass the ref_map pigeon_junction_coverage resources to pigeon classify"
-    }
-    isocall_extra_merged_profile: {
-      description: "Optional merged profile that will be merged in addition to the generated isocall profiles"
-    }
-    isocall_min_read_fraction: {
-      description: "Minimum read fraction for joint isocall calling"
-    }
-    isocall_max_bundles_per_gene: {
-      description: "Maximum bundles per gene for joint isocall calling"
-    }
-    isocall_min_reads_per_isoform: {
-      description: "Minimum reads per isoform for joint isocall calling"
-    }
-    pigeon_min_ref_length: {
-      description: "Minimum reference length for pigeon classify"
     }
     output_prefix: {
       description: "Shared prefix for joint calling and classification outputs"
@@ -172,27 +151,18 @@ workflow kinnex_isoseq {
   input {
     Array[HiFiSource] hifi_sources
     File biosample_csv
-    File hifi_demux_barcodes
-    File skera_adapters
-    File barcoded_primers
+    String? reference_container
+    ReferenceOverrides reference_overrides = object {
+    }
+    String? kinnex_primers_set
     Array[File]? consensusreadset_xmls
-    File ref_map_file
-    Boolean isoseq_require_polya = true
-    Boolean pigeon_use_polya = true
-    Boolean pigeon_use_cage_peak = true
-    Boolean pigeon_use_junction = true
-    File? isocall_extra_merged_profile
-    Float isocall_min_read_fraction = 0.99
-    Int isocall_max_bundles_per_gene = 10000
-    Int isocall_min_reads_per_isoform = 3
-    Int pigeon_min_ref_length = 100
     String output_prefix = "joint"
 
     # Backend configuration
     String backend = "HPC"
     Int max_retries = 2
     Int add_memory_mb = 0
-    Int nproc = 16
+    Int nproc = 32
     String? container_registry
   }
 
@@ -205,6 +175,16 @@ workflow kinnex_isoseq {
   }
 
   RuntimeAttributes default_runtime_attributes = backend_configuration.runtime_attributes
+
+  call ReferenceResources.resolve_reference_resources { input:
+    resolution_profile = "kinnex_isoseq",
+    reference_container = reference_container,
+    reference_overrides = reference_overrides,
+    kinnex_primers_set = kinnex_primers_set,
+    runtime_attributes = default_runtime_attributes
+  }
+
+  ResolvedReferenceResources reference_resources = resolve_reference_resources.resources
 
   scatter (hifi_source in hifi_sources) {
     File hifi_bam = hifi_source.hifi_bam
@@ -219,35 +199,45 @@ workflow kinnex_isoseq {
     hifi_bam_barcodes = hifi_bam_barcodes,
     needs_hifi_demux = needs_hifi_demux,
     biosample_csv = biosample_csv,
-    hifi_demux_barcodes = hifi_demux_barcodes,
-    skera_adapters = skera_adapters,
-    barcoded_primers = barcoded_primers,
+    hifi_demux_barcodes = select_first([
+      reference_resources.hifi_demux_barcodes
+    ]),
+    skera_adapters = select_first([
+      reference_resources.skera_adapters
+    ]),
+    barcoded_primers = select_first([
+      reference_resources.barcoded_primers
+    ]),
     consensusreadset_xmls = consensusreadset_xmls,
-    runtime_attributes = default_runtime_attributes,
-    isoseq_require_polya = isoseq_require_polya
+    runtime_attributes = default_runtime_attributes
   }
 
   call SecondaryAnalysisCore.secondary_analysis_core as secondary_analysis_core { input:
     flnc_bams = preprocessing_core.flnc_bams,
-    ref_map_file = ref_map_file,
+    genome_fasta = select_first([
+      reference_resources.genome_fasta
+    ]),
+    genome_fasta_index = select_first([
+      reference_resources.genome_fasta_index
+    ]),
+    annotation_gtf_gz = select_first([
+      reference_resources.annotation_gtf_gz
+    ]),
+    pigeon_poly_a = reference_resources.pigeon_poly_a,
+    pigeon_cage_peak_bed = reference_resources.pigeon_cage_peak_bed,
+    pigeon_junction_coverage = reference_resources.pigeon_junction_coverage,
     runtime_attributes = default_runtime_attributes,
-    pigeon_use_polya = pigeon_use_polya,
-    pigeon_use_cage_peak = pigeon_use_cage_peak,
-    pigeon_use_junction = pigeon_use_junction,
-    isocall_extra_merged_profile = isocall_extra_merged_profile,
-    isocall_min_read_fraction = isocall_min_read_fraction,
-    isocall_max_bundles_per_gene = isocall_max_bundles_per_gene,
-    isocall_min_reads_per_isoform = isocall_min_reads_per_isoform,
-    pigeon_min_ref_length = pigeon_min_ref_length,
     output_prefix = output_prefix
   }
 
   output {
     String workflow_name = "kinnex_isoseq"
-    String workflow_version = "0.2.0"
+    String workflow_version = "0.3.0"
     String preprocessing_workflow_name = "preprocessing"
     String secondary_analysis_workflow_name = "secondary_analysis"
-    String reference_name = secondary_analysis_core.reference_name
+    String? reference_container_uri = resolve_reference_resources.reference_container_uri
+    String reference_mode = resolve_reference_resources.reference_mode
+    String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version
     Array[String] source_dataset_names = preprocessing_core.source_dataset_names
     Array[String] preprocessing_dataset_names = preprocessing_core.dataset_names
     Array[File] hifi_demux_datasets = preprocessing_core.hifi_demux_datasets
@@ -255,7 +245,7 @@ workflow kinnex_isoseq {
     Array[String] flnc_names = preprocessing_core.flnc_names
     Array[File] flnc_bams = preprocessing_core.flnc_bams
     Array[File] flnc_bam_pbis = preprocessing_core.flnc_bam_pbis
-    Array[File] refine_summary_reports = preprocessing_core.refine_summary_reports
+    File refine_summary_report = preprocessing_core.refine_summary_report
     File? flnc_dataset_xml = preprocessing_core.flnc_dataset_xml
     Array[File]? flnc_child_dataset_xmls = preprocessing_core.flnc_child_dataset_xmls
     Array[File]? flnc_dataset_bams = preprocessing_core.flnc_dataset_bams
@@ -263,7 +253,6 @@ workflow kinnex_isoseq {
     Array[String] sample_names = secondary_analysis_core.sample_names
     Array[String] sample_prefixes = secondary_analysis_core.sample_prefixes
     Array[Int] group_sizes = secondary_analysis_core.group_sizes
-    Array[File] grouped_flnc_bams = secondary_analysis_core.grouped_flnc_bams
     Array[File] aligned_bams = secondary_analysis_core.aligned_bams
     Array[File] aligned_bam_bais = secondary_analysis_core.aligned_bam_bais
     File isocall_isoforms_gtf = secondary_analysis_core.isocall_isoforms_gtf

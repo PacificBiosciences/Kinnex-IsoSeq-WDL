@@ -30,13 +30,13 @@ workflow isoform_classification_core {
       description: "Prepared pigeon classification resources"
     }
     pigeon_use_polya: {
-      description: "Pass the pigeon polyA resource to pigeon classify"
+      description: "Whether to pass the polyA resource to pigeon classify when the resource is available"
     }
     pigeon_use_cage_peak: {
-      description: "Pass the pigeon CAGE peak resource to pigeon classify"
+      description: "Whether to pass the CAGE peak resource to pigeon classify when the resource is available"
     }
     pigeon_use_junction: {
-      description: "Pass the pigeon junction coverage resource to pigeon classify"
+      description: "Whether to pass the junction-coverage resource to pigeon classify when the resource is available"
     }
     pigeon_min_ref_length: {
       description: "Minimum reference length for pigeon classify"
