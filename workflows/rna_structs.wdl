@@ -15,8 +15,8 @@ struct ReferenceOverrides {
   File? pigeon_cage_peak_bed
   File? pigeon_junction_coverage
   File? hifi_demux_barcodes
-  File? barcoded_primers
-  File? skera_adapters
+  File? indexed_primers
+  File? segmentation_adapters
 }
 
 struct ResolvedReferenceResources {
@@ -27,8 +27,8 @@ struct ResolvedReferenceResources {
   File? pigeon_cage_peak_bed
   File? pigeon_junction_coverage
   File? hifi_demux_barcodes
-  File? barcoded_primers
-  File? skera_adapters
+  File? indexed_primers
+  File? segmentation_adapters
 }
 
 struct PigeonResources {

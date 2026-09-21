@@ -31,8 +31,11 @@ task validate_reference_sources {
     reference_container: {
       description: "Optional immutable reference-container URI"
     }
-    kinnex_primers_set: {
-      description: "Optional Kinnex primer set used to select packaged Skera adapters when no custom Skera adapter override is supplied"
+    segmentation_adapter_set: {
+      description: "Optional segmentation adapter set used to select packaged segmentation adapters when no custom segmentation adapter override is supplied"
+    }
+    isoseq_primers_set: {
+      description: "Optional Iso-Seq primer set used to select a packaged indexed-primer FASTA when no custom indexed_primers override is supplied; omission selects IsoSeq-v2"
     }
     present_override_names: {
       description: "Logical names of typed reference overrides supplied by the caller"
@@ -45,7 +48,8 @@ task validate_reference_sources {
   input {
     String resolution_profile
     String? reference_container
-    String? kinnex_primers_set
+    String? segmentation_adapter_set
+    String? isoseq_primers_set
     Array[String] present_override_names
     RuntimeAttributes runtime_attributes
   }
@@ -57,11 +61,16 @@ task validate_reference_sources {
     reference_container,
     ""
   ])
-  String kinnex_primers_set_value = select_first([
-    kinnex_primers_set,
+  String segmentation_adapter_set_value = select_first([
+    segmentation_adapter_set,
     ""
   ])
-  Boolean has_kinnex_primers_set = defined(kinnex_primers_set)
+  Boolean has_segmentation_adapter_set = defined(segmentation_adapter_set)
+  String isoseq_primers_set_value = select_first([
+    isoseq_primers_set,
+    ""
+  ])
+  Boolean has_isoseq_primers_set = defined(isoseq_primers_set)
   File present_override_names_file = write_lines(present_override_names)
 
   command <<<
@@ -70,15 +79,26 @@ task validate_reference_sources {
     python3 - \
       "~{resolution_profile}" \
       "~{reference_container_value}" \
-      "~{kinnex_primers_set_value}" \
-      "~{true="true" false="false" has_kinnex_primers_set}" \
+      "~{segmentation_adapter_set_value}" \
+      "~{true="true" false="false" has_segmentation_adapter_set}" \
+      "~{isoseq_primers_set_value}" \
+      "~{true="true" false="false" has_isoseq_primers_set}" \
       "~{present_override_names_file}" <<'PY'
     import pathlib
     import re
     import sys
 
-    profile, container, adapter_set, has_adapter_set_value, override_names_file = sys.argv[1:]
+    (
+        profile,
+        container,
+        adapter_set,
+        has_adapter_set_value,
+        isoseq_primers_set,
+        has_isoseq_primers_set_value,
+        override_names_file,
+    ) = sys.argv[1:]
     has_adapter_set = has_adapter_set_value == 'true'
+    has_isoseq_primers_set = has_isoseq_primers_set_value == 'true'
     present_overrides = {name for name in pathlib.Path(override_names_file).read_text().splitlines() if name}
 
     resource_groups = {
@@ -100,8 +120,8 @@ task validate_reference_sources {
         'preprocessing': {
             'required': {
                 'hifi_demux_barcodes',
-                'barcoded_primers',
-                'skera_adapters',
+                'indexed_primers',
+                'segmentation_adapters',
             },
             'optional': set(),
         },
@@ -139,8 +159,10 @@ task validate_reference_sources {
         errors.append('unknown reference override names: ' + ', '.join(unknown_overrides))
     if profile not in profile_groups:
         errors.append(f'unknown resolution profile: {profile}')
-    if has_adapter_set and adapter_set not in {'8fold', '12fold', '16fold'}:
-        errors.append('kinnex_primers_set must be one of: 8fold, 12fold, 16fold')
+    if has_adapter_set and adapter_set not in {'8-fold', '12-fold', '16-fold'}:
+        errors.append('segmentation_adapter_set must be one of: 8-fold, 12-fold, 16-fold')
+    if has_isoseq_primers_set and isoseq_primers_set not in {'IsoSeq-v2', 'IsoSeq96'}:
+        errors.append('isoseq_primers_set must be one of: IsoSeq-v2, IsoSeq96')
 
     if container and not re.search(r'@sha256:[0-9a-f]{64}$', container):
         errors.append('reference_container must end in a lowercase 64-character @sha256 digest')
@@ -159,9 +181,13 @@ task validate_reference_sources {
             errors.append(f'overrides are not used by resolution profile {profile}: ' + ', '.join(irrelevant))
 
         if has_adapter_set and 'preprocessing' not in groups:
-            errors.append(f'kinnex_primers_set is not used by resolution profile {profile}')
-        if has_adapter_set and 'skera_adapters' in present_overrides:
-            errors.append('kinnex_primers_set cannot be supplied with a custom skera_adapters override')
+            errors.append(f'segmentation_adapter_set is not used by resolution profile {profile}')
+        if has_adapter_set and 'segmentation_adapters' in present_overrides:
+            errors.append('segmentation_adapter_set cannot be supplied with a custom segmentation_adapters override')
+        if has_isoseq_primers_set and 'preprocessing' not in groups:
+            errors.append(f'isoseq_primers_set is not used by resolution profile {profile}')
+        if has_isoseq_primers_set and 'indexed_primers' in present_overrides:
+            errors.append('isoseq_primers_set cannot be supplied with a custom indexed_primers override')
 
         if 'genome' in groups and 'genome_fasta' in present_overrides and 'annotation_gtf_gz' not in present_overrides:
             errors.append('annotation_gtf_gz override is required when genome_fasta is overridden')
@@ -301,14 +327,20 @@ workflow resolve_reference_resources {
     resolution_profile: {
       description: "Internal workflow profile that determines the required reference resources"
     }
+    ref_name: {
+      description: "Named packaged reference used when an explicit reference-container URI is not supplied"
+    }
     reference_container: {
-      description: "Optional immutable reference-container URI used for defaults"
+      description: "Optional explicit immutable reference-container URI; takes precedence over ref_name"
     }
     reference_overrides: {
       description: "Typed optional overrides for packaged reference files; a genome override requires an annotation override and suppresses packaged Pigeon support fallbacks"
     }
-    kinnex_primers_set: {
-      description: "Optional Kinnex primer set used to select packaged Skera adapters when no custom Skera adapter override is supplied; omission selects 8fold"
+    segmentation_adapter_set: {
+      description: "Optional segmentation adapter set used to select packaged segmentation adapters when no custom segmentation adapter override is supplied; omission selects 8-fold"
+    }
+    isoseq_primers_set: {
+      description: "Optional Iso-Seq primer set used to select a packaged indexed-primer FASTA when no custom indexed_primers override is supplied; omission selects IsoSeq-v2"
     }
     runtime_attributes: {
       description: "Runtime attribute structure"
@@ -317,10 +349,12 @@ workflow resolve_reference_resources {
 
   input {
     String resolution_profile
+    String ref_name = "GRCh38_gencode49"
     String? reference_container
     ReferenceOverrides reference_overrides = object {
     }
-    String? kinnex_primers_set
+    String? segmentation_adapter_set
+    String? isoseq_primers_set
     RuntimeAttributes runtime_attributes
   }
 
@@ -329,55 +363,61 @@ workflow resolve_reference_resources {
       then [
         "genome_fasta"
       ]
-      else []
-    ,
+      else [],
     if defined(reference_overrides.annotation_gtf_gz)
       then [
         "annotation_gtf_gz"
       ]
-      else []
-    ,
+      else [],
     if defined(reference_overrides.pigeon_poly_a)
       then [
         "pigeon_poly_a"
       ]
-      else []
-    ,
+      else [],
     if defined(reference_overrides.pigeon_cage_peak_bed)
       then [
         "pigeon_cage_peak_bed"
       ]
-      else []
-    ,
+      else [],
     if defined(reference_overrides.pigeon_junction_coverage)
       then [
         "pigeon_junction_coverage"
       ]
-      else []
-    ,
+      else [],
     if defined(reference_overrides.hifi_demux_barcodes)
       then [
         "hifi_demux_barcodes"
       ]
-      else []
-    ,
-    if defined(reference_overrides.barcoded_primers)
+      else [],
+    if defined(reference_overrides.indexed_primers)
       then [
-        "barcoded_primers"
+        "indexed_primers"
       ]
-      else []
-    ,
-    if defined(reference_overrides.skera_adapters)
+      else [],
+    if defined(reference_overrides.segmentation_adapters)
       then [
-        "skera_adapters"
+        "segmentation_adapters"
       ]
       else []
   ])
 
+  # Pinned reference data container images, keyed by ref_name. Values are
+  # registry-relative so named references follow the shared container_registry.
+  Map[String, String] reference_containers = {
+    "GRCh38_gencode49": "workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:c68ba123e395f41176dd7a8d500bc84a7d1d097b08a850dc8ff57664a67c811a"  # bundle v0.2.0
+  }
+
+  String selected_reference_container = if defined(reference_container)
+    then select_first([
+      reference_container
+    ])
+    else runtime_attributes.container_registry + "/" + reference_containers[ref_name]
+
   call validate_reference_sources { input:
     resolution_profile = resolution_profile,
-    reference_container = reference_container,
-    kinnex_primers_set = kinnex_primers_set,
+    reference_container = selected_reference_container,
+    segmentation_adapter_set = segmentation_adapter_set,
+    isoseq_primers_set = isoseq_primers_set,
     present_override_names = present_override_names,
     runtime_attributes = runtime_attributes
   }
@@ -388,16 +428,19 @@ workflow resolve_reference_resources {
   Boolean needs_container = validate_reference_sources.needs_container
 
   Boolean uses_genome_override = defined(reference_overrides.genome_fasta)
-  Boolean uses_skera_override = defined(reference_overrides.skera_adapters)
-  String effective_kinnex_primers_set = select_first([
-    kinnex_primers_set,
-    "8fold"
+  Boolean uses_segmentation_override = defined(reference_overrides.segmentation_adapters)
+  Boolean uses_indexed_primers_override = defined(reference_overrides.indexed_primers)
+  String effective_segmentation_adapter_set = select_first([
+    segmentation_adapter_set,
+    "8-fold"
+  ])
+  String effective_isoseq_primers_set = select_first([
+    isoseq_primers_set,
+    "IsoSeq-v2"
   ])
 
   if (needs_container) {
-    String required_reference_container = select_first([
-      reference_container
-    ])
+    String required_reference_container = selected_reference_container
     call ReferenceContainer.unpack_reference_container { input:
       reference_container = required_reference_container,
       runtime_attributes = runtime_attributes
@@ -463,19 +506,30 @@ workflow resolve_reference_resources {
       ])
   }
 
-  if (needs_preprocessing && !uses_skera_override && effective_kinnex_primers_set == "8fold") {
-    File selected_packaged_skera_adapters_8fold = select_first([
-      unpack_reference_container.skera_adapters_8fold
+  if (needs_preprocessing && !uses_indexed_primers_override && effective_isoseq_primers_set == "IsoSeq-v2") {
+    File selected_packaged_indexed_primers_isoseq_v2 = select_first([
+      unpack_reference_container.indexed_primers_isoseq_v2
     ])
   }
-  if (needs_preprocessing && !uses_skera_override && effective_kinnex_primers_set == "12fold") {
-    File selected_packaged_skera_adapters_12fold = select_first([
-      unpack_reference_container.skera_adapters_12fold
+  if (needs_preprocessing && !uses_indexed_primers_override && effective_isoseq_primers_set == "IsoSeq96") {
+    File selected_packaged_indexed_primers_isoseq96 = select_first([
+      unpack_reference_container.indexed_primers_isoseq96
     ])
   }
-  if (needs_preprocessing && !uses_skera_override && effective_kinnex_primers_set == "16fold") {
-    File selected_packaged_skera_adapters_16fold = select_first([
-      unpack_reference_container.skera_adapters_16fold
+
+  if (needs_preprocessing && !uses_segmentation_override && effective_segmentation_adapter_set == "8-fold") {
+    File selected_packaged_segmentation_adapters_8fold = select_first([
+      unpack_reference_container.segmentation_adapters_8fold
+    ])
+  }
+  if (needs_preprocessing && !uses_segmentation_override && effective_segmentation_adapter_set == "12-fold") {
+    File selected_packaged_segmentation_adapters_12fold = select_first([
+      unpack_reference_container.segmentation_adapters_12fold
+    ])
+  }
+  if (needs_preprocessing && !uses_segmentation_override && effective_segmentation_adapter_set == "16-fold") {
+    File selected_packaged_segmentation_adapters_16fold = select_first([
+      unpack_reference_container.segmentation_adapters_16fold
     ])
   }
 
@@ -484,15 +538,16 @@ workflow resolve_reference_resources {
       reference_overrides.hifi_demux_barcodes,
       unpack_reference_container.hifi_demux_barcodes
     ])
-    File selected_barcoded_primers = select_first([
-      reference_overrides.barcoded_primers,
-      unpack_reference_container.barcoded_primers
+    File selected_indexed_primers = select_first([
+      reference_overrides.indexed_primers,
+      selected_packaged_indexed_primers_isoseq_v2,
+      selected_packaged_indexed_primers_isoseq96
     ])
-    File selected_skera_adapters = select_first([
-      reference_overrides.skera_adapters,
-      selected_packaged_skera_adapters_8fold,
-      selected_packaged_skera_adapters_12fold,
-      selected_packaged_skera_adapters_16fold
+    File selected_segmentation_adapters = select_first([
+      reference_overrides.segmentation_adapters,
+      selected_packaged_segmentation_adapters_8fold,
+      selected_packaged_segmentation_adapters_12fold,
+      selected_packaged_segmentation_adapters_16fold
     ])
   }
 
@@ -505,8 +560,8 @@ workflow resolve_reference_resources {
     pigeon_cage_peak_bed: selected_pigeon_cage_peak_bed,
     pigeon_junction_coverage: selected_pigeon_junction_coverage,
     hifi_demux_barcodes: selected_hifi_demux_barcodes,
-    barcoded_primers: selected_barcoded_primers,
-    skera_adapters: selected_skera_adapters
+    indexed_primers: selected_indexed_primers,
+    segmentation_adapters: selected_segmentation_adapters
   }
 
   output {

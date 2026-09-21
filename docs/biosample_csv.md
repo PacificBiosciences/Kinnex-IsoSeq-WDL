@@ -6,11 +6,17 @@ outer SMRTbell barcode and cDNA Barcode combination to the biological sample
 name that should be written to the final FLNC BAM `SM` tag.
 
 The checked-in
-[biosamples.example.csv](../backends/hpc/biosamples.example.csv) is provided
-next to the public HPC input templates as a starting point.
+[biosamples.example.csv](../backends/hpc/biosamples.example.csv) sits next to
+the public HPC input templates. Use it as a starting point. It contains all 48
+combinations of outer barcodes `bcM0001` through `bcM0004` and cDNA barcodes
+`IsoSeqX_bc01_5p` through `IsoSeqX_bc12_5p`. Each cDNA barcode uses the shared
+`IsoSeqX_3p` reverse barcode. The placeholder biosample names repeat across
+outer barcodes to show how downstream processing groups technical partitions
+of the same biological sample. Replace them with the sample assignments for
+the run.
 
-The biosample CSV shall be in CSV format with column headers `HiFi Barcode`,
-`cDNA Barcode`, and `Bio Sample`, written as the exact three-column header:
+The biosample CSV must have the columns `HiFi Barcode`, `cDNA Barcode`, and
+`Bio Sample`, written as this exact three-column header:
 
 ```csv
 HiFi Barcode,cDNA Barcode,Bio Sample
@@ -44,11 +50,16 @@ infer or normalize names such as `bcM0001` into `bcM0001--bcM0001`.
 - Within a single `HiFi Barcode` group, each `cDNA Barcode` must be unique.
 - Different `HiFi Barcode` groups may reuse the same `cDNA Barcode` and/or `Bio Sample`.
 
-Choose stable `Bio Sample` names that are safe for downstream grouping and output
-prefixes. FLNC alignment groups BAMs by the exact `SM` value. Preprocessing keeps
-this strict `Bio Sample` naming contract, while the public `secondary_analysis`
-entrypoint is more permissive for external FLNC BAM `SM` values and sanitizes
-those values into filename prefixes.
+Use stable `Bio Sample` names that are safe for downstream grouping and output
+prefixes. FLNC alignment groups BAMs by the exact `SM` value. Preprocessing
+uses the strict `Bio Sample` naming rules above. The public
+`secondary_analysis` entrypoint accepts more characters in external FLNC BAM
+`SM` values and sanitizes those values for filename prefixes.
+
+Preprocessing derives the movie component of each FLNC basename from the input
+BAM `@RG PU`, independently of the source BAM filename. It combines that movie
+with the exact `HiFi Barcode` and `cDNA Barcode` pairs while cDNA Lima writes the
+corresponding `Bio Sample` into the final `SM` tag.
 
 ## Run modes
 
@@ -67,7 +78,7 @@ appear in the `hifi_demux_barcodes`. Multiple source BAMs may use the same barco
 pair, for example when the same barcode set was reused across movies or runs.
 
 For both modes, each component of every `cDNA Barcode` pair is checked against
-the FASTA record names in the `barcoded_primers`.
+the FASTA record names in `indexed_primers`.
 
 ## Derived cDNA biosample CSVs
 
@@ -81,7 +92,7 @@ IsoSeqX_bc01_5p--IsoSeqX_3p,sample_1
 IsoSeqX_bc02_5p--IsoSeqX_3p,sample_2
 ```
 
-This derived file is passed to downstream cDNA `lima`.
+The workflow passes this derived file to downstream cDNA `lima`.
 
 ## Examples
 
@@ -101,12 +112,10 @@ bcM0003--bcM0003,bcU0001_5p--bcU0001_3p,sample_6
 bcM0004--bcM0004,bcU0001_5p--bcU0001_3p,sample_1
 ```
 
-The workflow groups rows by `HiFi Barcode` and derives one cDNA biosample CSV per
-outer barcode:
-
-For demultiplexing outputs, the workflow preserves first-seen `HiFi Barcode`
-order from this CSV and cDNA barcode row order within each derived cDNA
-biosample CSV.
+The workflow groups rows by `HiFi Barcode` and derives one cDNA biosample CSV
+per outer barcode. Demultiplexing outputs preserve the first-seen
+`HiFi Barcode` order from this CSV and the cDNA barcode row order within each
+derived cDNA biosample CSV.
 
 `bcM0001--bcM0001.cdna_biosample.csv`:
 
@@ -172,8 +181,7 @@ m21003...bcM0002--bcM0002.IsoSeqX_bc02_5p--IsoSeqX_3p.flnc.bam  SM:sample_2
 ```
 
 The FLNC-level `secondary_analysis` groups BAMs by the exact `SM` tag before
-alignment. A grouping report for the example above
-would include rows like:
+alignment. Its grouping report for this example includes rows such as:
 
 ```tsv
 sample_name sample_prefix group_size action input_bam

@@ -82,14 +82,8 @@ workflow secondary_analysis_core {
     isocall_extra_merged_profile: {
       description: "Optional extra merged isocall profile"
     }
-    isocall_min_read_fraction: {
-      description: "Minimum read fraction for joint isocall calling"
-    }
-    isocall_max_bundles_per_gene: {
-      description: "Maximum bundles per gene for joint isocall calling"
-    }
-    isocall_min_reads_per_isoform: {
-      description: "Minimum reads per isoform for joint isocall calling"
+    isocall_config_preset: {
+      description: "Isocall calling configuration preset"
     }
     pigeon_min_ref_length: {
       description: "Minimum reference length for pigeon classify"
@@ -177,9 +171,7 @@ workflow secondary_analysis_core {
     Boolean pigeon_use_cage_peak = true
     Boolean pigeon_use_junction = true
     File? isocall_extra_merged_profile
-    Float isocall_min_read_fraction = 0.99
-    Int isocall_max_bundles_per_gene = 10000
-    Int isocall_min_reads_per_isoform = 3
+    String isocall_config_preset = "default"
     Int pigeon_min_ref_length = 100
     String output_prefix = "joint"
     Int pbsamoa_merge_compression = 6
@@ -283,9 +275,7 @@ workflow secondary_analysis_core {
     genome_fasta = genome_fasta,
     genome_fasta_index = genome_fasta_index,
     runtime_attributes = runtime_attributes,
-    isocall_min_read_fraction = isocall_min_read_fraction,
-    isocall_max_bundles_per_gene = isocall_max_bundles_per_gene,
-    isocall_min_reads_per_isoform = isocall_min_reads_per_isoform,
+    isocall_config_preset = isocall_config_preset,
     isocall_profile_threads = isocall_profile_threads,
     isocall_profile_mem_gb = isocall_profile_mem_gb,
     isocall_prep_isoforms_threads = isocall_prep_isoforms_threads,

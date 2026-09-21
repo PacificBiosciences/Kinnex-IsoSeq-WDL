@@ -14,6 +14,9 @@ task validate_preprocessing_inputs {
       },
       outer_barcode_pairs: {
         description: "Outer barcode pairs"
+      },
+      movie_name: {
+        description: "Acquisition movie name from the BAM header PU value"
       }
     }
   }
@@ -26,7 +29,7 @@ task validate_preprocessing_inputs {
       description: "HiFi BAM barcode pairs"
     }
     source_dataset_names: {
-      description: "Source dataset names"
+      description: "Source dataset names used for reporting and filename-barcode validation"
     }
     needs_hifi_demux: {
       description: "Run upstream HiFi demux"
@@ -37,8 +40,8 @@ task validate_preprocessing_inputs {
     hifi_demux_barcodes: {
       description: "HiFi demux barcode FASTA"
     }
-    barcoded_primers: {
-      description: "Barcoded primer FASTA"
+    indexed_primers: {
+      description: "Iso-Seq indexed-primer FASTA"
     }
     runtime_attributes: {
       description: "Runtime attribute structure"
@@ -52,7 +55,7 @@ task validate_preprocessing_inputs {
     Boolean needs_hifi_demux
     File biosample_csv
     File hifi_demux_barcodes
-    File barcoded_primers
+    File indexed_primers
     RuntimeAttributes runtime_attributes
   }
 
@@ -77,11 +80,14 @@ task validate_preprocessing_inputs {
       "~{hifi_bam_barcodes_file}" \
       "~{biosample_csv}" \
       "~{hifi_demux_barcodes}" \
-      "~{barcoded_primers}" \
+      "~{indexed_primers}" \
       > preprocessing_input_validation.txt <<'PY'
     import csv
+    import datetime
+    import json
     import re
     import sys
+    import uuid
     from collections import Counter, defaultdict
 
     import pysam
@@ -93,11 +99,12 @@ task validate_preprocessing_inputs {
         hifi_bam_barcodes_path,
         biosample_csv,
         hifi_demux_barcodes,
-        barcoded_primers,
+        indexed_primers,
     ) = sys.argv[1:]
 
     needs_hifi_demux = needs_hifi_demux_raw == 'true'
     bio_sample_name_re = re.compile(r'^[A-Za-z0-9_-]{1,40}$')
+    movie_name_re = re.compile(r'^[A-Za-z0-9_-]+$')
     pysam.set_verbosity(0)
 
 
@@ -107,6 +114,24 @@ task validate_preprocessing_inputs {
 
 
     def fail(message):
+        # SL server will automatically detect and load alarms.json
+        with open('alarms.json', 'wt') as alarms_json:
+            alarms_json.write(
+                json.dumps(
+                    [
+                        {
+                            'exception': 'ValidationError',
+                            'info': message,
+                            'message': message,
+                            'name': 'Validation Error',
+                            'severity': 'ERROR',
+                            'owner': 'validate_preprocessing_inputs',
+                            'createdAt': datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+                            'id': str(uuid.uuid4()),
+                        }
+                    ]
+                )
+            )
         sys.exit(message)
 
 
@@ -135,6 +160,22 @@ task validate_preprocessing_inputs {
         if duplicate_names:
             fail(f'duplicate FASTA record names in {label}: ' + ', '.join(duplicate_names))
         return set(names)
+
+
+    def filename_hifi_barcode_conflicts(source_name, provided_barcode, hifi_names):
+        provided_components = set(split_barcode_pair(provided_barcode, 'hifi_sources.hifi_barcode'))
+        conflicts = []
+        for field in source_name.split('.'):
+            field_parts = field.split('--')
+            is_known_pair = (
+                len(field_parts) == 2 and all(field_parts) and all(component in hifi_names for component in field_parts)
+            )
+            if is_known_pair:
+                if field != provided_barcode:
+                    conflicts.append(field)
+            elif field in hifi_names and field not in provided_components:
+                conflicts.append(field)
+        return list(dict.fromkeys(conflicts))
 
 
     def validate_bio_sample_name(sample_name, label):
@@ -166,8 +207,11 @@ task validate_preprocessing_inputs {
             fail(f'{bam} has multiple @RG PU values: ' + ', '.join(repr(pu) for pu in sorted(observed_pu)))
 
         pu = next(iter(observed_pu))
-        if any(char in pu for char in '\t\r\n'):
-            fail(f'{bam} has a PU value with tab, carriage return, or newline characters: {pu!r}')
+        if not movie_name_re.fullmatch(pu):
+            fail(
+                f'{bam} has invalid @RG PU movie name {pu!r}; '
+                'expected one or more ASCII letters, digits, underscores, or hyphens'
+            )
         return pu
 
 
@@ -178,6 +222,15 @@ task validate_preprocessing_inputs {
         fail('hifi_sources must contain at least one source BAM')
     if len(source_names) != len(hifi_bams):
         fail('internal error: source name and hifi_bams arrays differ in length')
+
+    bam_pu_values = [(bam, read_single_pu_value(bam)) for bam in hifi_bams]
+    distinct_pu_values = sorted({pu for _, pu in bam_pu_values})
+    if len(distinct_pu_values) != 1:
+        fail(
+            'all hifi_sources BAMs must have the same @RG PU value; observed '
+            + ', '.join(f'{bam}: {pu!r}' for bam, pu in bam_pu_values)
+        )
+    movie_name = distinct_pu_values[0]
 
     duplicate_source_names = duplicates(source_names)
     if duplicate_source_names:
@@ -193,13 +246,6 @@ task validate_preprocessing_inputs {
             fail(
                 'each hifi_sources entry must include hifi_barcode in cDNA demux-only mode: '
                 f'got {len(hifi_bam_barcodes)} hifi_barcode values for {len(hifi_bams)} source BAMs'
-            )
-        bam_pu_values = [(bam, read_single_pu_value(bam)) for bam in hifi_bams]
-        distinct_pu_values = sorted({pu for _, pu in bam_pu_values})
-        if len(distinct_pu_values) != 1:
-            fail(
-                'all hifi_sources BAMs must have the same @RG PU value in '
-                'cDNA demux-only mode; observed ' + ', '.join(f'{bam}: {pu!r}' for bam, pu in bam_pu_values)
             )
 
     groups = defaultdict(list)
@@ -239,7 +285,7 @@ task validate_preprocessing_inputs {
     if not groups:
         fail(f'{biosample_csv} has no data rows')
 
-    cdna_names = read_fasta_names(barcoded_primers, 'preprocessing.barcoded_primers')
+    cdna_names = read_fasta_names(indexed_primers, 'preprocessing.indexed_primers')
     hifi_names = read_fasta_names(
         hifi_demux_barcodes,
         'preprocessing.hifi_demux_barcodes',
@@ -256,7 +302,7 @@ task validate_preprocessing_inputs {
             if component not in cdna_names:
                 missing_cdna_components.append(component)
     if missing_cdna_components:
-        fail('cDNA Barcode components are absent from barcoded_primers: ' + ', '.join(sorted(set(missing_cdna_components))))
+        fail('cDNA Barcode components are absent from indexed_primers: ' + ', '.join(sorted(set(missing_cdna_components))))
 
     hifi_barcodes_to_check = sorted(groups) if needs_hifi_demux else hifi_bam_barcodes
     missing_hifi_components = []
@@ -270,13 +316,29 @@ task validate_preprocessing_inputs {
             + ', '.join(sorted(set(missing_hifi_components)))
         )
 
+    if not needs_hifi_demux:
+        for source_name, hifi_bam_barcode in zip(source_names, hifi_bam_barcodes):
+            conflicts = filename_hifi_barcode_conflicts(source_name, hifi_bam_barcode, hifi_names)
+            if conflicts:
+                conflict_text = ', '.join(repr(conflict) for conflict in conflicts)
+                print(
+                    f'WARNING: source BAM basename {source_name!r} contains HiFi barcode '
+                    f'value(s) {conflict_text} that do not correspond to provided '
+                    f'hifi_barcode {hifi_bam_barcode!r}',
+                    file=sys.stderr,
+                )
+
     print('preprocessing input validation passed')
     print(f'source_datasets={len(source_names)}')
     print(f'biosample_outer_barcodes={len(groups)}')
+    print(f'movie_name={movie_name}')
 
     with open('outer_barcode_pairs.txt', 'w', encoding='utf-8') as out_fh:
         for outer in outer_barcode_order:
             out_fh.write(outer + '\n')
+
+    with open('movie_name.txt', 'w', encoding='utf-8') as out_fh:
+        out_fh.write(movie_name + '\n')
     PY
   >>>
 
@@ -284,222 +346,13 @@ task validate_preprocessing_inputs {
     File validation_report = "preprocessing_input_validation.txt"
     File validated_biosample_csv = biosample_csv
     Array[String] outer_barcode_pairs = read_lines("outer_barcode_pairs.txt")
+    String movie_name = read_string("movie_name.txt")
   }
 
   runtime {
     cpu: threads
     memory: total_mem_mb + " MB"
     docker: runtime_attributes.container_registry + "/pb_wdl_base@sha256:03cb3c01937eccc907f8ad71c87b258581504572205fe3f31a657e318f3564ae"
-    maxRetries: runtime_attributes.max_retries
-  }
-}
-
-task validate_consensusreadset_xmls {
-  meta {
-    description: "Validate SMRT Link ConsensusReadSet XML metadata and source BAM acquisition compatibility."
-    outputs: {
-      validation_report: {
-        description: "ConsensusReadSet XML validation report"
-      },
-      first_consensusreadset_xml: {
-        description: "First ConsensusReadSet XML"
-      },
-      collection_contexts: {
-        description: "Collection contexts"
-      },
-      validated_biosample_csv_out: {
-        description: "Validated biosample CSV"
-      }
-    }
-  }
-
-  parameter_meta {
-    consensusreadset_xmls: {
-      description: "ConsensusReadSet XMLs"
-    }
-    source_hifi_bams: {
-      description: "Source HiFi BAMs"
-    }
-    validated_biosample_csv: {
-      description: "Validated biosample CSV"
-    }
-    runtime_attributes: {
-      description: "Runtime attribute structure"
-    }
-  }
-
-  input {
-    Array[File] consensusreadset_xmls
-    Array[File] source_hifi_bams
-    File validated_biosample_csv
-    RuntimeAttributes runtime_attributes
-  }
-
-  Int threads = 1
-  Int mem_gb = 4
-  Int total_mem_mb = (mem_gb * 1024) + runtime_attributes.add_memory_mb
-
-  command <<<
-    set -euo pipefail
-
-    printf '%s\n' "~{sep="\" \"" consensusreadset_xmls}" > consensusreadset_xmls.txt
-    printf '%s\n' "~{sep="\" \"" source_hifi_bams}" > source_hifi_bams.txt
-
-    python3 - \
-      "consensusreadset_xmls.txt" \
-      "source_hifi_bams.txt" \
-      > consensusreadset_xml_validation.txt <<'PY'
-    import sys
-
-    from pbcore.io import BamReader, ConsensusReadSet
-
-    consensusreadset_xmls_file, source_hifi_bams_file = sys.argv[1:]
-
-
-    def fail(message):
-        sys.exit(message)
-
-
-    def read_lines(path):
-        with open(path, 'r', encoding='utf-8') as fh:
-            return [line.rstrip('\n') for line in fh if line.rstrip('\n')]
-
-
-    def get_required_nonnegative_metadata(metadata, xml_path, element_name):
-        if element_name not in metadata.tags:
-            fail(f'{xml_path} is missing {element_name} metadata')
-        value = metadata.getMemberV(element_name, default=None, asType=int)
-        if value is None:
-            fail(f'{xml_path} {element_name} metadata must be a parseable nonnegative integer')
-        if value < 0:
-            fail(f'{xml_path} {element_name} metadata must be nonnegative; observed {value}')
-        return value
-
-
-    def validate_xml(xml_path):
-        try:
-            dataset = ConsensusReadSet(xml_path, skipCounts=True, skipMissing=True)
-        except Exception as exc:
-            fail(f'{xml_path} is not a valid ConsensusReadSet XML: {exc}')
-
-        get_required_nonnegative_metadata(dataset.metadata, xml_path, 'TotalLength')
-        get_required_nonnegative_metadata(dataset.metadata, xml_path, 'NumRecords')
-
-        collections = list(dataset.metadata.collections)
-        if not collections:
-            fail(f'{xml_path} must contain collection metadata')
-
-        collection_ids = set()
-        contexts = set()
-        consensus_read_set_ref_ids = set()
-        for index, collection in enumerate(collections, start=1):
-            unique_id = (collection.uniqueId or '').strip()
-            context = (collection.context or '').strip()
-            consensus_read_set_ref_id = (collection.consensusReadSetRef.uuid or '').strip()
-            if not unique_id:
-                fail(f'{xml_path} CollectionMetadata[{index}] is missing UniqueId')
-            if not context:
-                fail(f'{xml_path} CollectionMetadata[{index}] is missing Context')
-            if not consensus_read_set_ref_id:
-                fail(f'{xml_path} CollectionMetadata[{index}] is missing ConsensusReadSetRef UniqueId')
-            collection_ids.add(unique_id)
-            contexts.add(context)
-            consensus_read_set_ref_ids.add(consensus_read_set_ref_id)
-
-        # TODO: context validation: should all XML collection contexts collapse to one?
-        return collection_ids, contexts, consensus_read_set_ref_ids
-
-
-    def read_bam_acquisition(bam):
-        try:
-            with BamReader(bam) as reader:
-                read_groups = list(reader.readGroupTable)
-        except Exception as exc:
-            fail(f'pbcore could not read source HiFi BAM header for {bam}: {exc}')
-
-        platform_units = set()
-        for index, read_group in enumerate(read_groups, start=1):
-            platform_unit = str(read_group.MovieName or '').strip()
-            if not platform_unit:
-                read_group_id = str(read_group.StringID or f'record {index}')
-                fail(f'{bam} @RG {read_group_id!r} is missing PU acquisition/platform-unit')
-            platform_units.add(platform_unit)
-
-        if not read_groups:
-            fail(f'{bam} has no @RG records')
-        if len(platform_units) != 1:
-            fail(
-                f'{bam} must have exactly one distinct @RG PU acquisition/platform-unit; '
-                'observed ' + ', '.join(repr(value) for value in sorted(platform_units))
-            )
-        return next(iter(platform_units))
-
-
-    xmls = read_lines(consensusreadset_xmls_file)
-    source_bams = read_lines(source_hifi_bams_file)
-
-    if not xmls:
-        fail('preprocessing.consensusreadset_xmls is defined but empty')
-    if not source_bams:
-        fail('hifi_sources must contain at least one source BAM')
-
-    all_collection_ids = set()
-    all_contexts = set()
-    all_consensus_read_set_ref_ids = set()
-    for xml_path in xmls:
-        collection_ids, contexts, consensus_read_set_ref_ids = validate_xml(xml_path)
-        all_collection_ids.update(collection_ids)
-        all_contexts.update(contexts)
-        all_consensus_read_set_ref_ids.update(consensus_read_set_ref_ids)
-
-    # TODO: collection metadata selection: should full collection metadata equality be required?
-    if len(all_collection_ids) != 1:
-        fail(
-            'all consensusreadset_xmls must share one CollectionMetadata UniqueId; observed '
-            + ', '.join(repr(value) for value in sorted(all_collection_ids))
-        )
-    if len(all_consensus_read_set_ref_ids) != 1:
-        fail(
-            'all consensusreadset_xmls must share one CollectionMetadata '
-            'ConsensusReadSetRef UniqueId; observed '
-            + ', '.join(repr(value) for value in sorted(all_consensus_read_set_ref_ids))
-        )
-
-    for bam in source_bams:
-        acquisition = read_bam_acquisition(bam)
-        if acquisition not in all_contexts:
-            fail(
-                f'{bam} @RG PU acquisition/platform-unit {acquisition!r} does not match '
-                'any consensusreadset_xmls CollectionMetadata Context; observed contexts: '
-                + ', '.join(repr(value) for value in sorted(all_contexts))
-            )
-
-    print('consensusreadset XML validation passed')
-    print(f'consensusreadset_xmls={len(xmls)}')
-    print(f'source_bams={len(source_bams)}')
-    print(f'collection_unique_id={next(iter(all_collection_ids))}')
-    print('consensusreadset_ref_unique_id=' + next(iter(all_consensus_read_set_ref_ids)))
-    print('collection_contexts=' + ','.join(sorted(all_contexts)))
-
-    with open('collection_contexts.txt', 'w', encoding='utf-8') as out_fh:
-        out_fh.writelines(context + '\n' for context in sorted(all_contexts))
-
-    with open('first.consensusreadset.xml', 'wb') as out_fh, open(xmls[0], 'rb') as in_fh:
-        out_fh.write(in_fh.read())
-    PY
-  >>>
-
-  output {
-    File validation_report = "consensusreadset_xml_validation.txt"
-    File first_consensusreadset_xml = "first.consensusreadset.xml"
-    File collection_contexts = "collection_contexts.txt"
-    File validated_biosample_csv_out = validated_biosample_csv
-  }
-
-  runtime {
-    cpu: threads
-    memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/pbcore@sha256:47fc6f1174605be9a8a932f17c15d1a29fc5e6b89ea6809f32995318c7afe1e7"  # 2.6.0_build3
     maxRetries: runtime_attributes.max_retries
   }
 }

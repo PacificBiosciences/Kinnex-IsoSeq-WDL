@@ -3,7 +3,7 @@
     "<local_path_prefix>/datasets/day0-rep1/flnc.bam",
     "<local_path_prefix>/datasets/day0-rep2/flnc.bam"
   ],
-  "secondary_analysis.reference_container": "quay.io/pacbio/workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:8e317498d715c1be48d64987685336763b729e91ebd213aeb3a3455b8b3690ac",
+  "secondary_analysis.ref_name": "GRCh38_gencode49",
   "secondary_analysis.output_prefix": "joint",
   "secondary_analysis.backend": "HPC"
 }

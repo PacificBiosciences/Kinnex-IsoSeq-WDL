@@ -30,16 +30,19 @@ task unpack_reference_container {
       hifi_demux_barcodes: {
         description: "Kinnex HiFi demultiplexing barcode FASTA"
       },
-      barcoded_primers: {
-        description: "Iso-Seq v2 barcoded primer FASTA"
+      indexed_primers_isoseq_v2: {
+        description: "Iso-Seq v2 indexed-primer FASTA"
       },
-      skera_adapters_8fold: {
+      indexed_primers_isoseq96: {
+        description: "IsoSeq96 indexed-primer FASTA"
+      },
+      segmentation_adapters_8fold: {
         description: "Eight-fold Kinnex adapter FASTA"
       },
-      skera_adapters_12fold: {
+      segmentation_adapters_12fold: {
         description: "Twelve-fold Kinnex adapter FASTA"
       },
-      skera_adapters_16fold: {
+      segmentation_adapters_16fold: {
         description: "Sixteen-fold Kinnex adapter FASTA"
       },
       manifest_json: {
@@ -58,7 +61,7 @@ task unpack_reference_container {
   }
 
   input {
-    String reference_container = "quay.io/pacbio/workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:8e317498d715c1be48d64987685336763b729e91ebd213aeb3a3455b8b3690ac"
+    String reference_container
     RuntimeAttributes runtime_attributes
   }
 
@@ -86,10 +89,11 @@ task unpack_reference_container {
     File pigeon_cage_peak_bed = glob("pigeon_cage_peak_bed/*")[0]
     File pigeon_junction_coverage = glob("pigeon_junction_coverage/*")[0]
     File hifi_demux_barcodes = glob("hifi_demux_barcodes/*")[0]
-    File barcoded_primers = glob("barcoded_primers/*")[0]
-    File skera_adapters_8fold = glob("skera_adapters_8fold/*")[0]
-    File skera_adapters_12fold = glob("skera_adapters_12fold/*")[0]
-    File skera_adapters_16fold = glob("skera_adapters_16fold/*")[0]
+    File indexed_primers_isoseq_v2 = glob("indexed_primers_isoseq_v2/*")[0]
+    File indexed_primers_isoseq96 = glob("indexed_primers_isoseq96/*")[0]
+    File segmentation_adapters_8fold = glob("skera_adapters_8fold/*")[0]
+    File segmentation_adapters_12fold = glob("skera_adapters_12fold/*")[0]
+    File segmentation_adapters_16fold = glob("skera_adapters_16fold/*")[0]
     File manifest_json = "manifest.json"
   }
 

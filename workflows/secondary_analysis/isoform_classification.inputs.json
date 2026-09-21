@@ -1,7 +1,7 @@
 {
   "isoform_classification.isoforms_gtf": "File",
   "isoform_classification.isocall_count_matrix": "File",
-  "isoform_classification.reference_container": "String? (optional)",
+  "isoform_classification.ref_name": "GRCh38_gencode49",
   "isoform_classification.reference_overrides": {
     "genome_fasta": "File? (optional)",
     "annotation_gtf_gz": "File? (optional)",

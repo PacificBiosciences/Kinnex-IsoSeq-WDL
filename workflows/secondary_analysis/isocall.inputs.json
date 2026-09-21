@@ -6,11 +6,13 @@
     "File"
   ],
   "isocall.isocall_extra_merged_profile": "File? (optional)",
-  "isocall.reference_container": "String? (optional)",
+  "isocall.ref_name": "GRCh38_gencode49",
   "isocall.reference_overrides": {
     "genome_fasta": "File? (optional)",
     "annotation_gtf_gz": "File? (optional)"
   },
+  "isocall.isocall_config_preset": "default",
+  "isocall.isocall_config_file": "File? (optional; takes precedence over preset)",
   "isocall.output_prefix": "joint",
   "isocall.backend": "HPC"
 }

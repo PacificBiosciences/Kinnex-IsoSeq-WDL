@@ -10,8 +10,9 @@
     }
   ],
   "kinnex_isoseq.biosample_csv": "<local_path_prefix>/samples/biosamples.csv",
-  "kinnex_isoseq.reference_container": "quay.io/pacbio/workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:8e317498d715c1be48d64987685336763b729e91ebd213aeb3a3455b8b3690ac",
-  "kinnex_isoseq.kinnex_primers_set": "8fold",
+  "kinnex_isoseq.ref_name": "GRCh38_gencode49",
+  "kinnex_isoseq.segmentation_adapter_set": "8-fold",
+  "kinnex_isoseq.isoseq_primers_set": "IsoSeq-v2",
   "kinnex_isoseq.output_prefix": "joint",
   "kinnex_isoseq.backend": "HPC"
 }

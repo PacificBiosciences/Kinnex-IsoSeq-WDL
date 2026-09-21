@@ -54,18 +54,6 @@ workflow kinnex_isoseq {
       refine_summary_report: {
         description: "Combined isoseq refine summary report"
       },
-      flnc_dataset_xml: {
-        description: "FLNC ConsensusReadSet XML"
-      },
-      flnc_child_dataset_xmls: {
-        description: "Child FLNC ConsensusReadSet XMLs"
-      },
-      flnc_dataset_bams: {
-        description: "Packaged FLNC BAMs"
-      },
-      flnc_dataset_bam_pbis: {
-        description: "Packaged FLNC BAM PBIs"
-      },
       sample_names: {
         description: "Sample names"
       },
@@ -109,22 +97,39 @@ workflow kinnex_isoseq {
     biosample_csv: {
       description: "Shared 3-column biosample CSV with header `HiFi Barcode,cDNA Barcode,Bio Sample`"
     }
+    ref_name: {
+      description: "Packaged reference to use when reference_container is omitted",
+      choices: [
+        "GRCh38_gencode49"
+      ]
+    }
     reference_container: {
-      description: "Optional immutable reference-container URI used for defaults"
+      description: "Optional explicit immutable reference-container URI; takes precedence over ref_name and is not rewritten by container_registry"
     }
     reference_overrides: {
       description: "Typed optional overrides for reference files; a genome override requires an annotation override and disables packaged Pigeon support fallbacks"
     }
-    kinnex_primers_set: {
-      description: "Optional Kinnex primer set used to select the packaged Skera adapter FASTA when no custom override is supplied; omission selects 8fold",
+    segmentation_adapter_set: {
+      description: "Optional segmentation adapter set used to select the packaged segmentation adapter FASTA when no custom override is supplied; omission selects 8-fold",
       choices: [
-        "8fold",
-        "12fold",
-        "16fold"
+        "8-fold",
+        "12-fold",
+        "16-fold"
       ]
     }
-    consensusreadset_xmls: {
-      description: "SMRT Link/internal metadata: optional input ConsensusReadSet XMLs for FLNC dataset XML generation."
+    isoseq_primers_set: {
+      description: "Optional Iso-Seq primer set used to select the packaged indexed-primer FASTA when no custom override is supplied; omission selects IsoSeq-v2",
+      choices: [
+        "IsoSeq-v2",
+        "IsoSeq96"
+      ]
+    }
+    isocall_config_preset: {
+      description: "Isocall calling configuration preset",
+      choices: [
+        "default",
+        "yolo"
+      ]
     }
     output_prefix: {
       description: "Shared prefix for joint calling and classification outputs"
@@ -144,18 +149,20 @@ workflow kinnex_isoseq {
       hidden: true
     }
     container_registry: {
-      description: "Optional PacBio registry for registry-relative task images. If omitted, quay.io/pacbio is used."
+      description: "Optional PacBio registry for registry-relative task images and named reference containers. If omitted, quay.io/pacbio is used."
     }
   }
 
   input {
     Array[HiFiSource] hifi_sources
     File biosample_csv
+    String ref_name = "GRCh38_gencode49"
     String? reference_container
     ReferenceOverrides reference_overrides = object {
     }
-    String? kinnex_primers_set
-    Array[File]? consensusreadset_xmls
+    String? segmentation_adapter_set
+    String? isoseq_primers_set
+    String isocall_config_preset = "default"
     String output_prefix = "joint"
 
     # Backend configuration
@@ -178,9 +185,11 @@ workflow kinnex_isoseq {
 
   call ReferenceResources.resolve_reference_resources { input:
     resolution_profile = "kinnex_isoseq",
+    ref_name = ref_name,
     reference_container = reference_container,
     reference_overrides = reference_overrides,
-    kinnex_primers_set = kinnex_primers_set,
+    segmentation_adapter_set = segmentation_adapter_set,
+    isoseq_primers_set = isoseq_primers_set,
     runtime_attributes = default_runtime_attributes
   }
 
@@ -202,13 +211,12 @@ workflow kinnex_isoseq {
     hifi_demux_barcodes = select_first([
       reference_resources.hifi_demux_barcodes
     ]),
-    skera_adapters = select_first([
-      reference_resources.skera_adapters
+    segmentation_adapters = select_first([
+      reference_resources.segmentation_adapters
     ]),
-    barcoded_primers = select_first([
-      reference_resources.barcoded_primers
+    indexed_primers = select_first([
+      reference_resources.indexed_primers
     ]),
-    consensusreadset_xmls = consensusreadset_xmls,
     runtime_attributes = default_runtime_attributes
   }
 
@@ -227,12 +235,13 @@ workflow kinnex_isoseq {
     pigeon_cage_peak_bed = reference_resources.pigeon_cage_peak_bed,
     pigeon_junction_coverage = reference_resources.pigeon_junction_coverage,
     runtime_attributes = default_runtime_attributes,
+    isocall_config_preset = isocall_config_preset,
     output_prefix = output_prefix
   }
 
   output {
     String workflow_name = "kinnex_isoseq"
-    String workflow_version = "0.3.0"
+    String workflow_version = "0.4.0"
     String preprocessing_workflow_name = "preprocessing"
     String secondary_analysis_workflow_name = "secondary_analysis"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
@@ -246,10 +255,6 @@ workflow kinnex_isoseq {
     Array[File] flnc_bams = preprocessing_core.flnc_bams
     Array[File] flnc_bam_pbis = preprocessing_core.flnc_bam_pbis
     File refine_summary_report = preprocessing_core.refine_summary_report
-    File? flnc_dataset_xml = preprocessing_core.flnc_dataset_xml
-    Array[File]? flnc_child_dataset_xmls = preprocessing_core.flnc_child_dataset_xmls
-    Array[File]? flnc_dataset_bams = preprocessing_core.flnc_dataset_bams
-    Array[File]? flnc_dataset_bam_pbis = preprocessing_core.flnc_dataset_bam_pbis
     Array[String] sample_names = secondary_analysis_core.sample_names
     Array[String] sample_prefixes = secondary_analysis_core.sample_prefixes
     Array[Int] group_sizes = secondary_analysis_core.group_sizes

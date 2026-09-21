@@ -45,20 +45,27 @@ workflow isocall {
     isocall_extra_merged_profile: {
       description: "Optional merged profile that will be merged in addition to the generated profiles"
     }
+    ref_name: {
+      description: "Packaged reference to use when reference_container is omitted",
+      choices: [
+        "GRCh38_gencode49"
+      ]
+    }
     reference_container: {
-      description: "Optional immutable reference-container URI used for defaults"
+      description: "Optional explicit immutable reference-container URI; takes precedence over ref_name and is not rewritten by container_registry"
     }
     reference_overrides: {
       description: "Typed optional overrides for reference files; a genome override requires an annotation override"
     }
-    isocall_min_read_fraction: {
-      description: "Minimum fraction of reads required for a reported isoform"
+    isocall_config_preset: {
+      description: "Isocall calling configuration preset",
+      choices: [
+        "default",
+        "yolo"
+      ]
     }
-    isocall_max_bundles_per_gene: {
-      description: "Maximum number of splice bundles to evaluate per gene"
-    }
-    isocall_min_reads_per_isoform: {
-      description: "Minimum reads required for a reported isoform"
+    isocall_config_file: {
+      description: "Optional custom Isocall TOML configuration file, which takes precedence over isocall_config_preset"
     }
     output_prefix: {
       description: "Basename prefix for joint isocall outputs"
@@ -78,7 +85,7 @@ workflow isocall {
       hidden: true
     }
     container_registry: {
-      description: "Optional PacBio registry for registry-relative task images; if omitted, quay.io/pacbio is used"
+      description: "Optional PacBio registry for registry-relative task images and named reference containers; if omitted, quay.io/pacbio is used"
     }
   }
 
@@ -86,12 +93,12 @@ workflow isocall {
     Array[File] aligned_bams
     Array[File] aligned_bam_bais
     File? isocall_extra_merged_profile
+    String ref_name = "GRCh38_gencode49"
     String? reference_container
     ReferenceOverrides reference_overrides = object {
     }
-    Float isocall_min_read_fraction = 0.99
-    Int isocall_max_bundles_per_gene = 10000
-    Int isocall_min_reads_per_isoform = 3
+    String isocall_config_preset = "default"
+    File? isocall_config_file
     String output_prefix = "joint"
 
     # Backend configuration
@@ -114,6 +121,7 @@ workflow isocall {
 
   call ReferenceResources.resolve_reference_resources { input:
     resolution_profile = "isocall",
+    ref_name = ref_name,
     reference_container = reference_container,
     reference_overrides = reference_overrides,
     runtime_attributes = default_runtime_attributes
@@ -135,15 +143,14 @@ workflow isocall {
       reference_resources.genome_fasta_index
     ]),
     runtime_attributes = default_runtime_attributes,
-    isocall_min_read_fraction = isocall_min_read_fraction,
-    isocall_max_bundles_per_gene = isocall_max_bundles_per_gene,
-    isocall_min_reads_per_isoform = isocall_min_reads_per_isoform,
+    isocall_config_preset = isocall_config_preset,
+    isocall_config_file = isocall_config_file,
     output_prefix = output_prefix
   }
 
   output {
     String workflow_name = "isocall"
-    String workflow_version = "0.3.0"
+    String workflow_version = "0.4.0"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
     String reference_mode = resolve_reference_resources.reference_mode
     String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version

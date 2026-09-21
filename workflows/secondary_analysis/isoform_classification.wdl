@@ -43,8 +43,14 @@ workflow isoform_classification {
     isocall_count_matrix: {
       description: "Supporting-read count matrix from the isocall stage"
     }
+    ref_name: {
+      description: "Packaged reference to use when reference_container is omitted",
+      choices: [
+        "GRCh38_gencode49"
+      ]
+    }
     reference_container: {
-      description: "Optional immutable reference-container URI used for defaults"
+      description: "Optional explicit immutable reference-container URI; takes precedence over ref_name and is not rewritten by container_registry"
     }
     reference_overrides: {
       description: "Typed optional overrides for reference files; a genome override requires an annotation override and disables packaged Pigeon support fallbacks"
@@ -79,13 +85,14 @@ workflow isoform_classification {
       hidden: true
     }
     container_registry: {
-      description: "Optional PacBio registry for registry-relative task images; if omitted, quay.io/pacbio is used"
+      description: "Optional PacBio registry for registry-relative task images and named reference containers; if omitted, quay.io/pacbio is used"
     }
   }
 
   input {
     File isoforms_gtf
     File isocall_count_matrix
+    String ref_name = "GRCh38_gencode49"
     String? reference_container
     ReferenceOverrides reference_overrides = object {
     }
@@ -115,6 +122,7 @@ workflow isoform_classification {
 
   call ReferenceResources.resolve_reference_resources { input:
     resolution_profile = "isoform_classification",
+    ref_name = ref_name,
     reference_container = reference_container,
     reference_overrides = reference_overrides,
     runtime_attributes = default_runtime_attributes
@@ -154,7 +162,7 @@ workflow isoform_classification {
 
   output {
     String workflow_name = "isoform_classification"
-    String workflow_version = "0.3.0"
+    String workflow_version = "0.4.0"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
     String reference_mode = resolve_reference_resources.reference_mode
     String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version

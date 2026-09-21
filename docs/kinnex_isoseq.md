@@ -1,16 +1,15 @@
 # kinnex_isoseq.wdl inputs and outputs
 
-This entrypoint chains preprocessing with the FLNC-level secondary analysis
-workflow.
+This entrypoint chains preprocessing with FLNC-level secondary analysis.
 
-It starts from HiFi source BAMs, runs preprocessing to generate FLNC BAMs,
-passes those FLNC BAMs into secondary analysis, validates and groups them by
-sample, aligns each FLNC BAM independently, merges same-sample aligned BAMs,
-runs isocall profiling and joint isocall calling, and then runs isoform
-classification on the joint isoform GTF and count matrix.
+Starting from HiFi source BAMs, it generates FLNC BAMs in preprocessing and
+passes them to secondary analysis. Secondary analysis validates and groups the
+BAMs by sample, aligns each BAM independently, merges same-sample alignments,
+runs isocall profiling and joint calling, and then runs isoform classification
+on the joint isoform GTF and count matrix.
 
-The [FLNC-level secondary analysis](./secondary_analysis.md) entrypoint remains
-the FLNC-to-classification workflow for callers that already have FLNC BAMs.
+Call [FLNC-level secondary analysis](./secondary_analysis.md) directly if you
+already have FLNC BAMs.
 
 ## Inputs
 
@@ -18,20 +17,21 @@ the FLNC-to-classification workflow for callers that already have FLNC BAMs.
 | ---- | ---- | ----------- |
 | Array[HiFiSource] | hifi_sources | Input HiFi source BAMs. Omit `hifi_barcode` for HiFi demux mode, or provide one `hifi_barcode` per BAM for cDNA demux-only mode. |
 | File | [biosample_csv](./biosample_csv.md) | Shared 3-column biosample CSV with exact header `HiFi Barcode,cDNA Barcode,Bio Sample`. |
-| String? | [reference_container](./reference_container.md) | Optional immutable reference-container URI ending in a 64-character lowercase `@sha256:` digest. It supplies defaults for resources not overridden below. |
+| String | [ref_name](./reference_container.md#named-reference-selection) | Packaged reference to use when `reference_container` is omitted. Choices: `GRCh38_gencode49`. Default: `"GRCh38_gencode49"`. |
+| String? | [reference_container](./reference_container.md#explicit-container-override) | Optional explicit immutable reference-container URI ending in a 64-character lowercase `@sha256:` digest. It takes precedence over `ref_name`. |
 | ReferenceOverrides | [reference_overrides](./reference_container.md#typed-overrides) | Optional typed per-file overrides. Default: empty. |
-| String? | kinnex_primers_set | Optional Kinnex primer set used to select packaged Skera adapters when `reference_overrides.skera_adapters` is absent: `8fold`, `12fold`, or `16fold`. Omission selects `8fold`; supplying both inputs is an error. |
-| Array[File]? | consensusreadset_xmls | Optional SMRT Link/internal input ConsensusReadSet XMLs for FLNC dataset XML generation. |
+| String? | segmentation_adapter_set | Optional segmentation adapter set used to select packaged Skera adapters when `reference_overrides.segmentation_adapters` is absent: `8-fold`, `12-fold`, or `16-fold`. Omission selects `8-fold`; supplying both inputs is an error. |
+| String? | isoseq_primers_set | Optional Iso-Seq primer set used to select packaged indexed primers when `reference_overrides.indexed_primers` is absent: `IsoSeq-v2` or `IsoSeq96`. Omission selects `IsoSeq-v2`; supplying both inputs is an error. |
+| String | isocall_config_preset | `isocall call` configuration preset: `default` enables the standard filters, while `yolo` disables optional filters but retains read-support thresholds. Default: `"default"`. |
 | String | output_prefix | Shared prefix for the joint-calling and classification outputs. Default: `"joint"`. |
-| String | backend | Backend where the workflow will be executed. Default: `"HPC"`; only HPC is currently supported. |
+| String | backend | Execution backend. Default: `"HPC"`; only HPC is currently supported. |
 | Int | max_retries | Maximum retries for failed task attempts. Default: `2`. |
-| Int | add_memory_mb | Add Task Memory (MB). Increasing this number allocates extra memory per task when submitting jobs to the compute backend. Default: `0`. |
-| String? | container_registry | Optional PacBio registry for registry-relative task images. If omitted, `"quay.io/pacbio"` is used; full image references are not rewritten. |
+| Int | add_memory_mb | Extra memory in MB added to each task request. Default: `0`. |
+| String? | container_registry | Optional PacBio registry for registry-relative task images and named reference containers. If omitted, `"quay.io/pacbio"` is used; explicit full image references are not rewritten. |
 
-The effective resources can come entirely from the reference container,
-entirely from typed overrides, or from overrides layered on the container
-defaults. The `biosample_csv`, input BAMs, and optional dataset XMLs remain
-run-specific filesystem inputs. See the
+Effective resources can come entirely from the reference container or typed
+overrides, or from overrides layered on the container defaults. The
+`biosample_csv` and input BAMs remain run-specific filesystem inputs. See the
 [reference-resource contract](./reference_container.md) for required fields,
 override precedence, and validation rules.
 
@@ -64,10 +64,6 @@ sample-sheet rules are described in
 | Array[File] | flnc_bams | Flattened FLNC BAMs across all normalized downstream datasets. |
 | Array[File] | flnc_bam_pbis | Flattened PacBio BAM indexes for FLNC BAMs across all normalized downstream datasets. |
 | File | refine_summary_report | Combined `isoseq refine` filter-summary report with one table row per successful technical partition, identified by Bio Sample, source dataset, HiFi barcode, and cDNA barcode. |
-| File? | flnc_dataset_xml | Optional generated top-level FLNC ConsensusReadSet XML when `consensusreadset_xmls` is provided. |
-| Array[File]? | flnc_child_dataset_xmls | Optional generated per-biosample child FLNC ConsensusReadSet XMLs. |
-| Array[File]? | flnc_dataset_bams | Optional FLNC BAMs referenced by generated dataset XMLs. |
-| Array[File]? | flnc_dataset_bam_pbis | Optional FLNC BAM indexes referenced by generated dataset XMLs. |
 | Array[String] | sample_names | Exact `SM` values from input FLNC BAM headers, in first-seen input order. |
 | Array[String] | sample_prefixes | Filename-safe sanitized prefixes derived from `sample_names`, in sample order. For preprocessing-produced FLNC BAMs, strict `Bio Sample` names usually make these prefixes match the sample names except that non-alphanumeric separators such as `_` and `-` are normalized to `_`. |
 | Array[Int] | group_sizes | Number of input FLNC BAMs in each sample group. |
@@ -80,5 +76,5 @@ sample-sheet rules are described in
 | File | filtered_isoforms_gtf | Filtered lite isoform GTF from `pigeon filter`. |
 | File | pigeon_filtered_classification | Filtered lite classification table from `pigeon filter`. |
 
-Tool log files are generated inside task execution directories for debugging,
-but are not exposed as workflow outputs.
+Tasks write tool logs in their execution directories for debugging. The
+workflow does not expose those logs as outputs.

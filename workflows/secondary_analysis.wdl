@@ -63,8 +63,14 @@ workflow secondary_analysis {
     flnc_bams: {
       description: "Input FLNC BAMs"
     }
+    ref_name: {
+      description: "Packaged reference to use when reference_container is omitted",
+      choices: [
+        "GRCh38_gencode49"
+      ]
+    }
     reference_container: {
-      description: "Optional immutable reference-container URI used for defaults"
+      description: "Optional explicit immutable reference-container URI; takes precedence over ref_name and is not rewritten by container_registry"
     }
     reference_overrides: {
       description: "Typed optional overrides for reference files; a genome override requires an annotation override and disables packaged Pigeon support fallbacks"
@@ -81,14 +87,12 @@ workflow secondary_analysis {
     isocall_extra_merged_profile: {
       description: "Optional merged profile that will be merged in addition to the generated isocall profiles"
     }
-    isocall_min_read_fraction: {
-      description: "Minimum read fraction for joint isocall calling"
-    }
-    isocall_max_bundles_per_gene: {
-      description: "Maximum bundles per gene for joint isocall calling"
-    }
-    isocall_min_reads_per_isoform: {
-      description: "Minimum reads per isoform for joint isocall calling"
+    isocall_config_preset: {
+      description: "Isocall calling configuration preset",
+      choices: [
+        "default",
+        "yolo"
+      ]
     }
     pigeon_min_ref_length: {
       description: "Minimum reference length for pigeon classify"
@@ -111,12 +115,13 @@ workflow secondary_analysis {
       hidden: true
     }
     container_registry: {
-      description: "Optional PacBio registry for registry-relative task images; if omitted, quay.io/pacbio is used"
+      description: "Optional PacBio registry for registry-relative task images and named reference containers; if omitted, quay.io/pacbio is used"
     }
   }
 
   input {
     Array[File] flnc_bams
+    String ref_name = "GRCh38_gencode49"
     String? reference_container
     ReferenceOverrides reference_overrides = object {
     }
@@ -124,9 +129,7 @@ workflow secondary_analysis {
     Boolean pigeon_use_cage_peak = true
     Boolean pigeon_use_junction = true
     File? isocall_extra_merged_profile
-    Float isocall_min_read_fraction = 0.99
-    Int isocall_max_bundles_per_gene = 10000
-    Int isocall_min_reads_per_isoform = 3
+    String isocall_config_preset = "default"
     Int pigeon_min_ref_length = 100
     String output_prefix = "joint"
 
@@ -150,6 +153,7 @@ workflow secondary_analysis {
 
   call ReferenceResources.resolve_reference_resources { input:
     resolution_profile = "secondary_analysis",
+    ref_name = ref_name,
     reference_container = reference_container,
     reference_overrides = reference_overrides,
     runtime_attributes = default_runtime_attributes
@@ -176,16 +180,14 @@ workflow secondary_analysis {
     pigeon_use_cage_peak = pigeon_use_cage_peak,
     pigeon_use_junction = pigeon_use_junction,
     isocall_extra_merged_profile = isocall_extra_merged_profile,
-    isocall_min_read_fraction = isocall_min_read_fraction,
-    isocall_max_bundles_per_gene = isocall_max_bundles_per_gene,
-    isocall_min_reads_per_isoform = isocall_min_reads_per_isoform,
+    isocall_config_preset = isocall_config_preset,
     pigeon_min_ref_length = pigeon_min_ref_length,
     output_prefix = output_prefix
   }
 
   output {
     String workflow_name = "secondary_analysis"
-    String workflow_version = "0.3.0"
+    String workflow_version = "0.4.0"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
     String reference_mode = resolve_reference_resources.reference_mode
     String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version

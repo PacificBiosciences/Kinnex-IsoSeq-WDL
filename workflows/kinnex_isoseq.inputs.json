@@ -10,7 +10,7 @@
     }
   ],
   "kinnex_isoseq.biosample_csv": "File",
-  "kinnex_isoseq.reference_container": "String? (optional)",
+  "kinnex_isoseq.ref_name": "GRCh38_gencode49",
   "kinnex_isoseq.reference_overrides": {
     "genome_fasta": "File? (optional)",
     "annotation_gtf_gz": "File? (optional)",
@@ -18,10 +18,12 @@
     "pigeon_cage_peak_bed": "File? (optional)",
     "pigeon_junction_coverage": "File? (optional)",
     "hifi_demux_barcodes": "File? (optional)",
-    "barcoded_primers": "File? (optional)",
-    "skera_adapters": "File? (optional)"
+    "indexed_primers": "File? (optional)",
+    "segmentation_adapters": "File? (optional)"
   },
-  "kinnex_isoseq.kinnex_primers_set": "String? (optional; omission selects 8fold)",
+  "kinnex_isoseq.segmentation_adapter_set": "String? (optional; omission selects 8-fold)",
+  "kinnex_isoseq.isoseq_primers_set": "String? (optional; omission selects IsoSeq-v2)",
+  "kinnex_isoseq.isocall_config_preset": "default",
   "kinnex_isoseq.output_prefix": "joint",
   "kinnex_isoseq.backend": "HPC"
 }
