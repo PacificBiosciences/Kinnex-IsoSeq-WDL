@@ -1,6 +1,42 @@
 # Changelog
 
-Any changes to PacBio Kinnex Iso-Seq Pipeline are noted below:
+This changelog records changes to the PacBio Kinnex Iso-Seq Pipeline.
+
+## [Unreleased]
+
+## [0.4.0]
+
+### Breaking changes
+
+- Renamed `ReferenceOverrides.barcoded_primers` to `indexed_primers` and
+  `ReferenceOverrides.skera_adapters` to `segmentation_adapters`.
+- Renamed `kinnex_primers_set` to `segmentation_adapter_set` and changed its
+  values from `8fold`, `12fold`, and `16fold` to `8-fold`, `12-fold`, and `16-fold`.
+- Replaced the Isocall threshold inputs on `secondary_analysis` and
+  standalone `isocall` with `isocall_config_preset` (`default` or `yolo`).
+  Standalone `isocall` additionally accepts a custom TOML configuration file,
+  which takes precedence over the preset.
+
+### New features
+
+- Added named reference selection through `ref_name`, defaulting to
+  `GRCh38_gencode49`. An explicit immutable `reference_container` takes
+  precedence, and typed per-file overrides remain supported.
+- Updated to Kinnex Iso-Seq resource bundle `0.2.0` support, including separate
+  packaged Iso-Seq v2 and Iso-Seq 96 indexed-primer FASTAs. Preprocessing and
+  end-to-end workflows can select them with `isoseq_primers_set`; omission
+  selects `IsoSeq-v2`.
+
+### Improvements
+
+- Updated Isocall from 1.1.0 to [1.3.0](https://github.com/PacificBiosciences/isocall/releases/tag/1.3.0).
+- Updated Slurm examples and development tooling to Sprocket 0.30.1, and added
+  Jenkins validation and real-container task-test coverage.
+
+### Fixes
+
+- Fixed Cromwell container-path localization of optional File inputs used by
+  Pigeon, Lima, and Isocall.
 
 ## [0.3.0]
 
@@ -16,10 +52,9 @@ Any changes to PacBio Kinnex Iso-Seq Pipeline are noted below:
 
 ### Improvements
 
-- You can now choose a Kinnex primer set set for `kinnex_primers_set` to `8fold`,
-  `12fold`, or `16fold`. If you leave it unset, the workflow uses `8fold`.
-- The workflow now aligns FLNC BAMs in parallel before merging them.
-- The Slurm examples and documentation now target Sprocket 0.28.0.
+- Added `kinnex_primers_set` with the values `8fold`, `12fold`, and `16fold`.
+  When unset, it defaults to `8fold`.
+- Parallelized FLNC BAM alignment before merging.
 
 ## [0.2.0]
 

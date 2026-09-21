@@ -1,17 +1,32 @@
 # Reference resources
 
-Workflow version `0.3.0` resolves reusable static resources from an optional
-reference container, typed per-file overrides, or both. The three user-facing
-workflows—`kinnex_isoseq`, `preprocessing`, and `secondary_analysis`—accept:
+Reusable static resources come from a named packaged reference, an optional
+explicit reference-container URI, typed per-file overrides, or a combination
+of these. All reference-consuming entrypoints accept:
 
 ```wdl
+String ref_name = "GRCh38_gencode49"
 String? reference_container
 ReferenceOverrides reference_overrides = object {}
 ```
 
-Resolution is deterministic. With the packaged genome, an override wins when
-present and the matching container resource is used otherwise. Overriding
-`genome_fasta` means that:
+`kinnex_isoseq`, `preprocessing`, `secondary_analysis`, standalone `isocall`,
+and standalone `isoform_classification` share this interface.
+
+The preprocessing-capable `kinnex_isoseq` and `preprocessing` entrypoints also
+accept:
+
+```wdl
+String? segmentation_adapter_set
+String? isoseq_primers_set
+```
+
+These selectors choose packaged preprocessing resources after container
+selection and before per-file resolution.
+
+Resolution follows a fixed precedence. An explicit `reference_container` takes
+precedence over `ref_name`. A typed file override then wins over the matching
+resource in the selected container. Overriding `genome_fasta` means that:
 
 - `annotation_gtf_gz` must also be explicitly overridden;
 - packaged Pigeon polyA, CAGE, and junction resources do not fall back from
@@ -22,9 +37,24 @@ present and the matching container resource is used otherwise. Overriding
 The workflow generates the FASTA index for an overridden genome and fails
 before downstream tasks start when the matching annotation is absent.
 
-## Container mode
+## Named reference selection
 
-Container-only runs provide one immutable reference-container URI:
+The default configuration selects the packaged GRCh38/Gencode 49 reference by name:
+
+```json
+{
+  "kinnex_isoseq.ref_name": "GRCh38_gencode49"
+}
+```
+
+`GRCh38_gencode49` is currently the only supported name. The shared resolver maps it to
+a repository-owned, digest-pinned container image. Named container images are
+registry-relative: they use `container_registry`, which defaults to
+`"quay.io/pacbio"`.
+
+## Explicit container override
+
+To select a specific container, provide its complete immutable URI:
 
 ```json
 {
@@ -32,15 +62,28 @@ Container-only runs provide one immutable reference-container URI:
 }
 ```
 
-The URI must end in an immutable lowercase 64-character `@sha256:` digest.
+The explicit URI takes precedence over `ref_name`, must end in an immutable
+lowercase 64-character `@sha256:` digest, and is not rewritten by
+`container_registry`.
 
-## Hybrid mode
+## Container mode
 
-Hybrid runs provide a container plus one or more typed overrides:
+Container-only runs use the selected named reference or an explicit container
+without typed file overrides:
 
 ```json
 {
-  "secondary_analysis.reference_container": "registry.example.org/pacbio/workflow-data-container-kinnex-isoseq-wdl-grch38@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "kinnex_isoseq.ref_name": "GRCh38_gencode49"
+}
+```
+
+## Hybrid mode
+
+Hybrid runs combine the selected container with one or more typed overrides:
+
+```json
+{
+  "secondary_analysis.ref_name": "GRCh38_gencode49",
   "secondary_analysis.reference_overrides": {
     "annotation_gtf_gz": "/shared/references/custom.annotation.gtf.gz"
   }
@@ -52,9 +95,11 @@ the packaged Pigeon resources.
 
 ## Custom mode
 
-Fully custom runs omit `reference_container` and provide every required base
-resource for the selected workflow. For example, `secondary_analysis`
-requires a genome FASTA and its matching annotation:
+Fully custom runs provide every required base resource for the selected
+workflow. The default `ref_name` does not need to be disabled: when no
+effective resource falls back to the container, the resolver does not unpack
+it and reports `reference_mode = "custom"`. For example,
+`secondary_analysis` requires a genome FASTA and its matching annotation:
 
 ```json
 {
@@ -85,35 +130,42 @@ The override object has eight optional file fields:
 | `pigeon_cage_peak_bed` | File? | Pigeon CAGE peaks. |
 | `pigeon_junction_coverage` | File? | Pigeon junction coverage. |
 | `hifi_demux_barcodes` | File? | HiFi-demultiplexing barcode FASTA. |
-| `barcoded_primers` | File? | Barcoded-primer FASTA. |
-| `skera_adapters` | File? | Any compatible custom Skera adapter FASTA. |
+| `indexed_primers` | File? | Compatible Iso-Seq indexed-primer FASTA. |
+| `segmentation_adapters` | File? | Any compatible custom Skera adapter FASTA. |
 
 Only override fields consumed by the selected entrypoint are accepted. For
-example, `preprocessing` rejects genome and Pigeon overrides. A supplied
-reference container is ignored when no effective resource falls back to it.
+example, `preprocessing` rejects genome and Pigeon overrides. The selected
+named or explicit reference container is ignored when no effective resource
+falls back to it.
 
-Generating the FASTA index guarantees that it describes the overridden FASTA;
-it does not establish biological or coordinate compatibility with an annotation
-or Pigeon support files supplied by separate overrides. Callers remain
-responsible for using mutually compatible resources. In particular, CAGE and
-junction data are assembly- and coordinate-specific, while the polyA motif list
-is species- and analysis-context-specific even though it is not
-coordinate-indexed.
+The generated FASTA index describes the overridden FASTA, but it cannot verify
+biological or coordinate compatibility with an annotation or Pigeon support
+files supplied through separate overrides. Callers must use mutually
+compatible resources. CAGE and junction data are specific to an assembly and
+coordinate system. The polyA motif list is specific to a species and analysis
+context even though it is not coordinate indexed.
 
 The packaged bundle is human GRCh38-specific. For mouse or another custom
 genome, provide the matching annotation and explicitly opt into only the
 species- and assembly-appropriate Pigeon support files.
 
-When `skera_adapters` is absent, optional `kinnex_primers_set` selects
-the container's 8-, 12-, or 16-fold Kinnex primer/Skera adapter FASTA; the
-default selects `8fold`.
+When `segmentation_adapters` is absent, optional `segmentation_adapter_set` selects
+the container's 8-, 12-, or 16-fold Kinnex segmentation-adapter FASTA; the
+default selects `8-fold`.
+
+When `indexed_primers` is absent, optional `isoseq_primers_set` selects the
+container's `IsoSeq-v2` or `IsoSeq96` indexed-primer FASTA; the default selects
+`IsoSeq-v2`. Supplying `isoseq_primers_set` together with
+`reference_overrides.indexed_primers` is an error, just as
+`segmentation_adapter_set` conflicts with
+`reference_overrides.segmentation_adapters`.
 
 Fully custom runs require the following workflow-specific files:
 
 | User-facing workflow | Required file overrides |
 | --- | --- |
-| `kinnex_isoseq` | Genome FASTA, annotation, both preprocessing FASTAs, and `skera_adapters` |
-| `preprocessing` | `hifi_demux_barcodes`, `barcoded_primers`, and `skera_adapters` |
+| `kinnex_isoseq` | Genome FASTA, annotation, `hifi_demux_barcodes`, `indexed_primers`, and `segmentation_adapters` |
+| `preprocessing` | `hifi_demux_barcodes`, `indexed_primers`, and `segmentation_adapters` |
 | `secondary_analysis` | Genome FASTA and annotation |
 | `isocall` | Genome FASTA and annotation |
 | `isoform_classification` | Genome FASTA and annotation |
@@ -123,12 +175,13 @@ profile in the table.
 
 ## Packaged resources
 
-The current GRCh38 container packages resource bundle `0.1.0`, derived from the
-[Kinnex Iso-Seq Zenodo dataset](https://doi.org/10.5281/zenodo.10839617). Its
-manifest exposes eleven packaged file entries, including separate 8-, 12-, and
-16-fold Skera adapter FASTAs, plus `reference_name` and
-`resource_bundle_version` metadata. The resolver hides those three packaged
-variants behind `kinnex_primers_set`.
+The currently published GRCh38 container packages resource bundle `0.2.0`,
+derived from the
+[Kinnex Iso-Seq Zenodo dataset](https://zenodo.org/records/22255332). Its manifest includes both packaged
+indexed-primer FASTAs and separate 8-, 12-, and 16-fold Skera adapter FASTAs,
+plus `reference_name` and `resource_bundle_version` metadata. The resolver
+hides the adapter variants behind `segmentation_adapter_set` and the indexed-primer
+variants behind `isoseq_primers_set`.
 
 The packaged annotation already satisfies Pigeon's nested gene/transcript
 ordering contract. Developers preparing a replacement annotation can check or
@@ -140,5 +193,5 @@ Each user-facing workflow exposes:
 
 - `reference_mode`: `container`, `hybrid`, or `custom`;
 - `reference_container_uri`: the base URI only when container defaults were
-  actually used;
+  used;
 - `base_resource_bundle_version`: the container bundle version when used.

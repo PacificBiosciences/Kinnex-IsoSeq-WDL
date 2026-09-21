@@ -22,8 +22,8 @@ task skera_split_hifi {
     hifi_bam: {
       description: "HiFi BAM"
     }
-    skera_adapters: {
-      description: "skera adapter FASTA"
+    segmentation_adapters: {
+      description: "Segmentation adapter FASTA"
     }
     threads: {
       description: "CPU threads"
@@ -39,7 +39,7 @@ task skera_split_hifi {
   input {
     String dataset_name
     File hifi_bam
-    File skera_adapters
+    File segmentation_adapters
     Int threads = 16
     Int mem_gb = 32
     RuntimeAttributes runtime_attributes
@@ -60,7 +60,7 @@ task skera_split_hifi {
       --log-level INFO \
       --log-file "~{output_prefix}.skera.log" \
       "~{hifi_bam}" \
-      "~{skera_adapters}" \
+      "~{segmentation_adapters}" \
       "~{output_prefix}.sreads.bam"
   >>>
 

@@ -61,7 +61,7 @@ default_slurm_partition.name = "compute"
 apptainer.executable = "/usr/bin/singularity"
 
 # Sprocket already adds `--containall` and `--cleanenv` to Apptainer/Singularity
-# task execution (See https://github.com/stjude-rust-labs/sprocket/blob/main/crates/wdl-engine/src/backend/apptainer.rs#L191).
+# task execution (See https://github.com/stjude-rust-labs/sprocket/blob/v0.30.1/crates/wdl-engine/src/backend/apptainer.rs#L191).
 # Add only site-specific extra `exec` flags here.
 apptainer.extra_args = []
 

@@ -63,7 +63,7 @@ task isocall_profile {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
+    docker: runtime_attributes.container_registry + "/isocall@sha256:34cbf179e342515ddfdd65e7f170ab76e4f6fd3993fcd06f236c13712eb8e882"  # 1.3.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
@@ -125,7 +125,7 @@ task isocall_prep_isoforms {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
+    docker: runtime_attributes.container_registry + "/isocall@sha256:34cbf179e342515ddfdd65e7f170ab76e4f6fd3993fcd06f236c13712eb8e882"  # 1.3.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
@@ -201,7 +201,7 @@ task isocall_merge_profiles {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
+    docker: runtime_attributes.container_registry + "/isocall@sha256:34cbf179e342515ddfdd65e7f170ab76e4f6fd3993fcd06f236c13712eb8e882"  # 1.3.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }
@@ -235,14 +235,11 @@ task isocall_call {
     genome_fasta_index: {
       description: "Reference FASTA index"
     }
-    isocall_min_read_fraction: {
-      description: "Minimum read fraction for joint isocall calling"
+    isocall_config_preset: {
+      description: "Isocall calling configuration preset"
     }
-    isocall_max_bundles_per_gene: {
-      description: "Maximum bundles per gene for joint isocall calling"
-    }
-    isocall_min_reads_per_isoform: {
-      description: "Minimum reads per isoform for joint isocall calling"
+    isocall_config_file: {
+      description: "Optional custom Isocall TOML configuration file, which takes precedence over the preset"
     }
     output_prefix: {
       description: "Output prefix"
@@ -263,9 +260,8 @@ task isocall_call {
     File known_isoforms_model
     File genome_fasta
     File genome_fasta_index
-    Float isocall_min_read_fraction
-    Int isocall_max_bundles_per_gene
-    Int isocall_min_reads_per_isoform
+    String isocall_config_preset = "default"
+    File? isocall_config_file
     String output_prefix = "joint"
     Int threads = 16
     Int mem_gb = 32
@@ -284,15 +280,18 @@ task isocall_call {
     ln --symbolic "~{genome_fasta}" "reference.fa"
     ln --symbolic "~{genome_fasta_index}" "reference.fa.fai"
 
+    isocall_config="~{isocall_config_preset}"
+    if [[ "~{defined(isocall_config_file)}" == "true" ]]; then
+      isocall_config="~{isocall_config_file}"
+    fi
+
     isocall call \
       --merged-profile "~{merged_profile}" \
       --threads "~{effective_threads}" \
       --known-isoforms "~{known_isoforms_model}" \
       --output-prefix "~{output_prefix}" \
       --reference "reference.fa" \
-      --min-read-fraction "~{isocall_min_read_fraction}" \
-      --max-bundles-per-gene "~{isocall_max_bundles_per_gene}" \
-      --min-reads-per-isoform "~{isocall_min_reads_per_isoform}" \
+      --config "${isocall_config}" \
       > "~{output_prefix}.isoforms.gtf.gz" \
       2> "~{output_prefix}.isocall_call.log"
   >>>
@@ -306,7 +305,7 @@ task isocall_call {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/isocall@sha256:1d45a7256f2f5e172b4722473d6feb604d104f694840c5ab7b4d4d5202b00c9b"  # 1.1.0_build1
+    docker: runtime_attributes.container_registry + "/isocall@sha256:34cbf179e342515ddfdd65e7f170ab76e4f6fd3993fcd06f236c13712eb8e882"  # 1.3.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }

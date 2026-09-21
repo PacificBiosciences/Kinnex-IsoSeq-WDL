@@ -113,13 +113,18 @@ task run_lima {
 
     mkdir -p demux
 
+    biosample_csv="~{biosample_csv}"
+    lima_biosample_args=()
+    if [[ "~{defined(biosample_csv)}" == "true" ]]; then
+      lima_biosample_args+=(--biosample-csv "${biosample_csv}")
+    fi
+
     lima \
       ~{true="--isoseq" false="" isoseq} \
       ~{true="--split-named" false="" split_named} \
       ~{if defined(hifi_preset)
         then "--hifi-preset '" + hifi_preset + "'"
-        else ""
-      } \
+        else ""} \
       ~{true="--store-unbarcoded" false="" store_unbarcoded} \
       ~{true="--ignore-xml-biosamples" false="" ignore_xml_biosamples} \
       ~{true="--overwrite-biosample-names" false="" overwrite_biosample_names} \
@@ -127,10 +132,7 @@ task run_lima {
       --num-threads ~{effective_threads} \
       --log-level INFO \
       --log-file "~{output_prefix}.lima.log" \
-      ~{if defined(biosample_csv)
-        then "--biosample-csv '" + biosample_csv + "'"
-        else ""
-      } \
+      "${lima_biosample_args[@]}" \
       "~{bam}" \
       "~{barcode_file}" \
       "~{output_target}"
@@ -140,12 +142,7 @@ task run_lima {
       "~{output_prefix}" \
       "~{emit_dataset_xml}" \
       "~{store_unbarcoded}" \
-      ~{if defined(biosample_csv)
-        then "'" + select_first([
-          biosample_csv
-        ]) + "'"
-        else "''"
-      } <<'PY'
+      "${biosample_csv}" <<'PY'
     import csv
     import os
     import sys
@@ -303,8 +300,7 @@ task run_lima {
     if unexpected_files:
         print(
             'WARNING: lima produced unexpected demux outputs; '
-            'excluding them from downstream manifests: '
-            + ', '.join(unexpected_files),
+            'excluding them from downstream manifests: ' + ', '.join(unexpected_files),
             file=sys.stderr,
         )
 

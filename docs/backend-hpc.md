@@ -1,17 +1,17 @@
 # HPC backend execution
 
-This guide describes supported execution on a Slurm HPC. We provide maintained
-example configurations for `miniwdl` with `miniwdl-slurm` and Sprocket with its
-Slurm/Apptainer backend.
+The supported HPC target is a Slurm cluster. The repository includes maintained
+example configurations for `miniwdl` with `miniwdl-slurm` and for Sprocket with
+its Slurm/Apptainer backend.
 
-The workflow engine is selected outside WDL by choosing an engine-specific
-configuration. Public example configurations are available for miniwdl at
-`backends/hpc/miniwdl.cfg` and Sprocket at `backends/hpc/sprocket.toml`.
-Cromwell users must provide their own configuration.
+Select the workflow engine outside WDL by choosing its configuration. The
+public miniwdl configuration is `backends/hpc/miniwdl.cfg`, and the Sprocket
+configuration is `backends/hpc/sprocket.toml`. Cromwell users must provide
+their own configuration.
 
-Execution is container based and workflow inputs provide high-level backend
-settings. Note that all execution engines expect access to Slurm submission commands
-and a Singularity-compatible container runtime on the cluster nodes.
+Execution is container based, and workflow inputs set the shared backend
+options. Every engine needs access to Slurm submission commands and a
+Singularity-compatible container runtime on the cluster nodes.
 
 > **Slurm launch host:** Start the workflow engine from a login node or submit
 > node with access to Slurm submission commands and the shared filesystem. The
@@ -24,8 +24,8 @@ and a Singularity-compatible container runtime on the cluster nodes.
 
 Install `miniwdl` and the Slurm plugin on the submit host where you start
 workflow runs. Use `uv` when it is available on your cluster or can be
-installed, it keeps everything in an isolated environment and
-installs the Slurm plugin into the same environment.
+installed. It creates an isolated environment and installs the Slurm plugin in
+that environment.
 
 ```bash
 uv tool install --python 3.12 'miniwdl>=1.13.1,<2' --with miniwdl-slurm
@@ -55,11 +55,11 @@ To set up Sprocket, either download a release binary from
 toolchain to build it yourself. For example, with Cargo:
 
 ```bash
-cargo install sprocket --version 0.28.0 --locked
+cargo install sprocket --version 0.30.1 --locked
 sprocket --version
 ```
 
-Building Sprocket 0.28.0 with Cargo requires Rust 1.95 or newer.
+Building Sprocket 0.30.1 with Cargo requires Rust 1.95 or newer.
 
 ### Cromwell
 
@@ -135,9 +135,9 @@ minimum, review these settings:
   location reachable by submit and compute nodes.
 
 The output, provenance database, call-cache, HTTP-cache, and image-cache paths
-are relative to the directory where you run `sprocket`; run from the repository
-root as shown below, or edit them to absolute shared paths. Note that the cache
-formats are engine-specific and should not be shared between engines.
+are relative to the directory where you run `sprocket`. Run from the repository
+root as shown below, or edit them to absolute shared paths. Cache formats are
+engine specific and should not be shared between engines.
 
 The public Sprocket template enables task call caching by default. Review
 `[run.task] cache_dir` before running so repeat or resumed runs use a cache
@@ -146,9 +146,8 @@ location that is visible from the submit host and compute nodes. It uses
 each file to improve cache invalidation without fully hashing large input
 files.
 
-Note that the Sprocket Slurm/Apptainer backend currently requires experimental
-execution features, these are enabled with
-`experimental_features_enabled = true`.
+The Sprocket Slurm/Apptainer backend currently requires experimental execution
+features. Enable them with `experimental_features_enabled = true`.
 
 All filesystem inputs, including typed reference overrides, must be visible
 from the submit host and compute nodes through the same shared paths. When a
@@ -157,15 +156,15 @@ authenticate to and pull it.
 
 ### Cromwell
 
-No Cromwell configuration is provided or maintained in this repository. Use your
-own Cromwell configuration and workflow options to define the Slurm
+This repository does not provide or maintain a Cromwell configuration. Use
+your own Cromwell configuration and workflow options to define the Slurm
 backend, container runtime, localization behavior, call-cache settings, and
 output directories.
 
-The `.hpc.inputs.json` templates can be used with Cromwell as-is after
-replacing file paths. Keep the workflow input `backend` set to
-`"HPC"`, this is a workflow-level runtime attribute selector and does not need
-to match the backend name inside your Cromwell configuration.
+You can use the `.hpc.inputs.json` templates with Cromwell after replacing the
+file paths. Keep the workflow input `backend` set to `"HPC"`. This
+workflow-level runtime attribute selector does not need to match the backend
+name in your Cromwell configuration.
 
 ## Prepare inputs
 
@@ -182,33 +181,38 @@ HPC templates live under [backends/hpc](../backends/hpc):
 - [backends/hpc/preprocessing.hpc.inputs.json](../backends/hpc/preprocessing.hpc.inputs.json)
 - [backends/hpc/secondary_analysis.hpc.inputs.json](../backends/hpc/secondary_analysis.hpc.inputs.json)
 - [backends/hpc/biosamples.example.csv](../backends/hpc/biosamples.example.csv),
-  an example sample sheet for preprocessing and end-to-end runs
+  a 4 × 12 barcode-combination sample-sheet template for preprocessing and
+  end-to-end runs
 
 Copy the matching `.hpc.inputs.json` template and replace every
 `<local_path_prefix>` placeholder with paths visible from the Slurm jobs.
-The HPC templates demonstrate container-only reference resolution and pin the
-immutable reference container published for the workflow release. The URI ends
-in a lowercase 64-character `@sha256:` digest; compute nodes need registry
-access. For hybrid or fully custom references, add the typed
-`reference_overrides` object and omit the container only after supplying every
-resource required by the entrypoint. See the
+The HPC templates demonstrate container-only reference resolution with
+`ref_name: "GRCh38_gencode49"`. The shared resolver maps that name to the
+immutable container published for the workflow release, so compute nodes need
+registry access. For hybrid or fully custom references, add the typed
+`reference_overrides` object. The default named container is not unpacked when
+every effective resource is overridden. See the
 [reference-resource contract](./reference_container.md).
 
 For `preprocessing` or `kinnex_isoseq` runs, prepare the
-[`biosample_csv`](./biosample_csv.md) sample sheet for your run. The checked-in
-[`biosamples.example.csv`](../backends/hpc/biosamples.example.csv) provides a
-starting point. Set optional `kinnex_primers_set` to `8fold`, `12fold`, or
-`16fold` to
-select a packaged Kinnex primer/Skera adapter FASTA; omission selects `8fold`. Alternatively, provide a
-compatible custom adapter FASTA through `reference_overrides.skera_adapters`.
-Supplying both is an error. Each preprocessing resource is resolved from its
-typed override or the reference container.
+[`biosample_csv`](./biosample_csv.md) sample sheet for your run. Use the
+checked-in [`biosamples.example.csv`](../backends/hpc/biosamples.example.csv)
+as a starting point. Set the optional `segmentation_adapter_set` input to `8-fold`,
+`12-fold`, or `16-fold` to select a packaged Kinnex segmentation-adapter FASTA;
+omission selects `8-fold`. Set `isoseq_primers_set` to `IsoSeq-v2` or
+`IsoSeq96` to select packaged indexed primers; omission selects `IsoSeq-v2`.
+Each selector conflicts with its matching custom override,
+`reference_overrides.segmentation_adapters` or
+`reference_overrides.indexed_primers`.
+
+Each preprocessing resource comes from its override or the reference
+container.
 
 For the end-to-end `kinnex_isoseq` workflow, choose the mode-specific template:
-use `kinnex_isoseq.no_instrument_demux.hpc.inputs.json` for one raw HiFi BAM that still
-needs upstream HiFi demux, or
-`kinnex_isoseq.from_instrument_demux.hpc.inputs.json` for already HiFi-demuxed BAMs
-that each provide a `hifi_barcode`.
+use `kinnex_isoseq.no_instrument_demux.hpc.inputs.json` for one raw HiFi BAM
+that still needs upstream HiFi demux, or
+`kinnex_isoseq.from_instrument_demux.hpc.inputs.json` for already HiFi-demuxed
+BAMs that each provide a `hifi_barcode`.
 
 Each public template includes `backend: "HPC"`. If a run needs more memory, add
 the workflow's `add_memory_mb` input to your input JSON to allocate extra memory
@@ -216,8 +220,8 @@ per task when submitting jobs to the compute backend. Optionally set
 `container_registry` in your input JSON if your site mirrors registry-relative
 PacBio images to a different registry; omit it to use `"quay.io/pacbio"`. Do
 not add per-task Docker or resource blocks to the public templates.
-`container_registry` does not rewrite `reference_container` or filesystem
-override paths.
+`container_registry` applies to named reference containers but does not rewrite
+an explicit `reference_container` URI or filesystem override paths.
 
 Review the [tools and containers](./tools_containers.md) documentation before
 executing pure-container runs.
@@ -238,8 +242,8 @@ miniwdl run --cfg ~/.config/miniwdl.cfg \
 
 ### Sprocket
 
-Pass input JSON files to Sprocket with an `@` prefix. The same HPC templates
-used by miniwdl are used by Sprocket.
+Pass input JSON files to Sprocket with an `@` prefix. Sprocket accepts the same
+HPC templates as miniwdl.
 
 ```bash
 sprocket run --config sprocket.hpc.toml \
@@ -260,4 +264,5 @@ java -Dconfig.file=/path/to/cromwell.conf \
   -o /path/to/cromwell.options.json
 ```
 
-The same pattern applies to the other user-facing entrypoints listed above.
+Use the same command pattern for the other user-facing entrypoints listed
+above.

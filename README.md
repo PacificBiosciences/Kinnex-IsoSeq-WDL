@@ -2,39 +2,41 @@
 
 > [!WARNING]
 > **BETA:** This workflow is under active development. Interfaces, defaults,
-> runtime behavior, and output bundles may change in wide-sweeping ways; use
+> runtime behavior, and output bundles may change substantially. Use
 > tagged releases for reproducible testing.
 
-Workflow for analyzing human PacBio Kinnex Iso-Seq sequencing data using
-[Workflow Description Language (WDL)](https://openwdl.org/).
+This repository contains workflows for analyzing human PacBio Kinnex Iso-Seq
+sequencing data with [Workflow Description Language
+(WDL)](https://openwdl.org/).
 
-- Docker images used by this workflow are defined in [the wdl-dockerfiles repo](https://github.com/PacificBiosciences/wdl-dockerfiles). Images are hosted in PacBio's [quay.io repository](https://quay.io/organization/pacbio).
-- Task container images are selected in WDL runtime blocks and documented in the [tools and containers](docs/tools_containers.md) documentation.
-- Reusable GRCh38 and Kinnex resources can be supplied through an immutable [reference container or typed file overrides](docs/reference_container.md).
-- User-facing workflow entrypoints live in the [workflows directory](workflows).
+- [The wdl-dockerfiles repository](https://github.com/PacificBiosciences/wdl-dockerfiles)
+  defines the Docker images, which PacBio hosts on
+  [quay.io](https://quay.io/organization/pacbio).
+- WDL runtime blocks select task container images. The
+  [tools and containers guide](docs/tools_containers.md) lists them.
+- Supply reusable GRCh38 and Kinnex resources through an immutable
+  [reference container or typed file overrides](docs/reference_container.md).
+- User-facing entrypoints live in the [workflows directory](workflows).
 
 ## Workflow
 
-This repository exposes three user-facing workflows:
+The repository has three user-facing workflows.
 
-The `kinnex_isoseq` workflow is designed for end-to-end analysis of Kinnex
-Isoseq HiFi data. It takes as input HiFi bams from a single acquisition and
-produces classified, filtered isoforms.
+`kinnex_isoseq` runs end-to-end analysis of Kinnex Iso-Seq HiFi data. It takes
+HiFi BAMs from a single acquisition and produces classified, filtered
+isoforms.
 
-The `preprocessing` workflow is design to generate transcript BAMs, also known
-as FLNC BAMs, from Kinnex HiFi data. It takes as input HiFi bams from a single
-acquisition and generates sample-annotated transcript BAMs which contain poly-A
-trimmed, 5' -> 3' transcript sequences.
+`preprocessing` generates transcript BAMs, also known as FLNC BAMs, from Kinnex
+HiFi data. It takes HiFi BAMs from a single acquisition and writes
+sample-annotated transcript BAMs containing poly-A-trimmed, 5' -> 3'
+transcript sequences.
 
-The `secondary_analysis` workflow takes a set of sample-annotated transcript
-BAMs, from any number of acquisitions. It produces classified, filtered isoform
-for each sample, as annotated in the BAM header. If multiple BAMs are provided
-for a sample, they are merged.
+`secondary_analysis` takes sample-annotated transcript BAMs from any number of
+acquisitions and produces classified, filtered isoforms for each sample named
+in the BAM headers. It merges multiple BAMs for the same sample.
 
 | <img src="docs/figures/workflow_diagram.png" width="800" alt="PacBio Kinnex Iso-Seq Pipeline"> |
 | :---: |
-
-**Workflow entrypoints**:
 
 - [End-to-end HiFi BAM workflow](workflows/kinnex_isoseq.wdl)
 - [Preprocessing workflow](workflows/preprocessing.wdl)
@@ -42,13 +44,13 @@ for a sample, they are merged.
 
 ## Quick start guide
 
-In this section, we describe a quick way to get started with:
+This example uses:
 
 - `miniwdl` as the workflow engine,
-- `slurm HPC` as the backend,
-- `apptainer` as the container run time,
-- the PacBio provided human reference data bundle,
-- an instrument acquisition which was not demultiplexed on-instrument.
+- Slurm HPC as the backend,
+- Apptainer as the container runtime,
+- the PacBio human reference data bundle,
+- an instrument acquisition that was not demultiplexed on instrument.
 
 ### Setup
 
@@ -95,11 +97,11 @@ miniwdl run --cfg ~/.config/miniwdl.cfg \
 
 ### Selecting a backend
 
-The currently supported public backend target is Slurm HPC. We provide
-maintained example configurations for running the workflow with miniwdl through
-miniwdl-slurm, and with Sprocket with its Slurm/Apptainer backend. Cromwell
-can use the same WDL entrypoints and HPC input templates, but this repository
-does not provide a Cromwell backend configuration.
+Slurm HPC is the supported public backend target. We maintain example
+configurations for miniwdl with miniwdl-slurm and for Sprocket with its
+Slurm/Apptainer backend. Cromwell can use the same WDL entrypoints and HPC
+input templates, but this repository does not provide a Cromwell backend
+configuration.
 
 | Backend | Status | Documentation |
 | :- | :- | :- |
@@ -110,38 +112,41 @@ does not provide a Cromwell backend configuration.
 
 ### Configuring a workflow engine and container runtime
 
-An execution engine is required to run WDL workflows. For the supported public
-HPC path, install [`miniwdl`](https://miniwdl.readthedocs.io/en/latest/) with
+You need a workflow engine to run WDL workflows. For the supported public HPC
+path, install [`miniwdl`](https://miniwdl.readthedocs.io/en/latest/) with
 [`miniwdl-slurm`](https://github.com/miniwdl-ext/miniwdl-slurm),
-[`sprocket`](https://github.com/stjude-rust-labs/sprocket), or [`Cromwell`](https://cromwell.readthedocs.io/en/stable/backends/Backends/).
-Make sure Slurm commands and a Singularity-compatible container runtime are available
-on the submit host and cluster nodes. See the [HPC backend guide](docs/backend-hpc.md)
-for setup details.
+[`sprocket`](https://github.com/stjude-rust-labs/sprocket), or
+[`Cromwell`](https://cromwell.readthedocs.io/en/stable/backends/Backends/).
+Make sure Slurm commands and a Singularity-compatible container runtime are
+available on the submit host and cluster nodes. See the
+[HPC backend guide](docs/backend-hpc.md) for setup details.
 
 ### Setting up your reference resources
 
-The simplest public path supplies `reference_container`: a complete OCI image
-URI pinned with a 64-character lowercase `@sha256:` digest. The container
-provides defaults for the genome, annotation, Pigeon support files, and Kinnex
-barcode, adapter, and primer resources without shared-filesystem resource
-setup.
+By default, `ref_name` is set to `"GRCh38_gencode49"`. The workflow resolves
+that name to the repository-owned, digest-pinned reference container. The
+container supplies the genome, annotation, Pigeon support files, and Kinnex
+barcode, adapter, and primer resources without requiring shared-filesystem
+resource setup. You can instead supply an explicit immutable
+`reference_container` URI, which takes precedence over `ref_name`.
 
-Each user-selectable resource can instead be replaced with a
-`reference_overrides` field. A run can use container defaults, combine a
-container with overrides, or omit the container when every resource required
-by its entrypoint is provided. An overridden genome must be an uncompressed
-FASTA, the workflow will generate its matching FASTA index and requires an
-explicit matching annotation override. Packaged Pigeon support files do not
-fall back for a custom genome: polyA, CAGE, and junction support are each
-optional and require their own override to be used. This rule is especially
-important for mouse and other non-GRCh38 genomes. See the
+Use `reference_overrides` to replace any user-selectable resource. A run can
+use container defaults, combine a container with overrides, or supply every
+resource required by its entrypoint.
+When all effective resources are overridden, the default named container is
+not unpacked. An overridden genome must be an uncompressed FASTA. The workflow
+generates its matching FASTA index and requires an explicit matching annotation
+override. Packaged Pigeon support files do not fall back for a custom genome:
+polyA, CAGE, and junction support are each optional and require their own
+override to be used. This rule is especially important for mouse and other
+non-GRCh38 genomes. See the
 [reference-resource specification](docs/reference_container.md) for validation
 rules and cross-resource compatibility responsibilities.
 
 ### Filling out the inputs JSON
 
-The input to a workflow run is defined in JSON format. Public workflow input
-templates live next to the workflow entrypoints:
+Each workflow run reads its inputs from JSON. Public input templates live next
+to the workflow entrypoints:
 
 - [workflows/kinnex_isoseq.inputs.json](workflows/kinnex_isoseq.inputs.json)
 - [workflows/preprocessing.inputs.json](workflows/preprocessing.inputs.json)
@@ -153,20 +158,30 @@ HPC input templates are available in the [HPC backend directory](backends/hpc):
 - [backends/hpc/kinnex_isoseq.from_instrument_demux.hpc.inputs.json](backends/hpc/kinnex_isoseq.from_instrument_demux.hpc.inputs.json)
 - [backends/hpc/preprocessing.hpc.inputs.json](backends/hpc/preprocessing.hpc.inputs.json)
 - [backends/hpc/secondary_analysis.hpc.inputs.json](backends/hpc/secondary_analysis.hpc.inputs.json)
-- [backends/hpc/biosamples.example.csv](backends/hpc/biosamples.example.csv), an example sample sheet for preprocessing and end-to-end runs
+- [backends/hpc/biosamples.example.csv](backends/hpc/biosamples.example.csv), a 4 × 12 barcode-combination sample-sheet template for preprocessing and end-to-end runs
 
 For the end-to-end workflow, use the `no_instrument_demux` template for one raw
 HiFi BAM, or the `from_instrument_demux` template for BAMs that have been
 demultiplexed using the HiFi barcode.
 
-Copy the template for the entrypoint you want to run, replace every
+Copy the template for the entrypoint you want to run and replace every
 `<local_path_prefix>` placeholder with paths visible to the workflow jobs. The
-templates pin the immutable reference container published for this workflow
-release. For preprocessing or end-to-end runs, omit
-`kinnex_primers_set` to use the packaged `8fold` Kinnex primer/Skera adapter
-FASTA, explicitly select another packaged set, or provide a custom FASTA through
-`reference_overrides.skera_adapters`. Do not supply the packaged selector
-together with a custom adapter override.
+templates select the digest-pinned `GRCh38_gencode49` reference published for
+this workflow release. For preprocessing or end-to-end runs,
+`segmentation_adapter_set` selects the packaged `8-fold`, `12-fold`, or `16-fold`
+Kinnex segmentation-adapter FASTA; omission selects `8-fold`. The matching
+`isoseq_primers_set` choices are `IsoSeq-v2` and `IsoSeq96`, with `IsoSeq-v2`
+selected on omission. Do not combine either selector with its matching custom
+override (`segmentation_adapters` or `indexed_primers`).
+
+If you do not use an optional input, leave it out of the input JSON. Do not set
+it to `null`, because some WDL runners do not accept null values. This also
+applies to optional fields inside inputs such as `hifi_sources` and
+`reference_overrides`. An empty string or list still counts as a value.
+
+The generic `workflows/*.inputs.json` templates list optional fields so you can
+see what is available. Replace an optional placeholder with a real value when
+you need it. Otherwise, delete the field. The HPC templates show this pattern.
 
 ### Running the workflow
 
@@ -200,27 +215,30 @@ miniwdl run --cfg ~/.config/miniwdl.cfg \
 
 ## Workflow inputs
 
-At a high level, the workflows use three input categories:
+The workflows use three input categories:
 
-- *reference resources* are resolved from an immutable
+- *reference resources* are resolved from a named or explicit immutable
   [`reference_container`](docs/reference_container.md), typed per-file
   `reference_overrides`, or both.
-- *sample sheets* are CSV files that describe run-specific sample and barcode assignments. `kinnex_isoseq` and `preprocessing` use [`biosample_csv`](docs/biosample_csv.md).
-- *inputs.json* files define the datasets, sample files, run mode, tuning parameters, and backend settings for a workflow run.
+- *sample sheets* are CSV files that describe run-specific sample and barcode
+  assignments. `kinnex_isoseq` and `preprocessing` use
+  [`biosample_csv`](docs/biosample_csv.md).
+- *inputs.json* files define the datasets, sample files, run mode, tuning
+  parameters, and backend settings for a workflow run.
 
 The end-to-end `kinnex_isoseq` entrypoint starts from `hifi_sources`.
 Omit `hifi_barcode` for HiFi demux mode, or provide one `hifi_barcode` per
 source BAM for cDNA demux-only mode.
 
 The standalone `preprocessing` entrypoint uses the same `hifi_sources`,
-reference-resource, adapter-selection, and `biosample_csv` inputs as the end-to-end workflow,
-and stops after producing FLNC BAMs.
+reference-resource, adapter-selection, and `biosample_csv` inputs as the
+end-to-end workflow, and stops after producing FLNC BAMs.
 
 The FLNC-level `secondary_analysis` entrypoint starts from `flnc_bams`. Each
 FLNC BAM must contain `@RG` records with exactly one distinct non-empty `SM`
-value. BAMs are grouped by the exact original `SM`, sanitized sample prefixes
-are used for final aligned BAM filenames. Each input BAM is aligned
-independently, and same-sample aligned BAMs are merged before isocall.
+value. The workflow groups BAMs by the exact original `SM` and uses sanitized
+sample prefixes for the final aligned BAM filenames. It aligns each input BAM
+independently, then merges same-sample aligned BAMs before isocall.
 
 Detailed workflow input and output interfaces are described in:
 
@@ -234,11 +252,13 @@ Detailed workflow input and output interfaces are described in:
 ## Tool versions and Docker images
 
 Task runtime blocks define the container images used by each workflow task.
-Registry-relative PacBio image references use the workflow `container_registry`
-input when provided, and otherwise default to `"quay.io/pacbio"`. The complete
-`reference_container` URI is separate and is never rewritten by that setting.
+Registry-relative PacBio image references, including named reference
+containers, use the workflow `container_registry` input when provided and
+otherwise default to `"quay.io/pacbio"`. An explicit complete
+`reference_container` URI is never rewritten by that setting.
 
-Tool and container details are documented in [tools and containers](docs/tools_containers.md).
+Tool and container details are documented in
+[tools and containers](docs/tools_containers.md).
 
 ## Resource requirements
 
@@ -248,7 +268,7 @@ WDL runtime blocks.
 
 ## Version information
 
-Current development version: **0.3.0**.
+Current development version: **0.4.0**.
 
 For a complete changelog, see the [changelog](CHANGELOG.md) or the git history.
 

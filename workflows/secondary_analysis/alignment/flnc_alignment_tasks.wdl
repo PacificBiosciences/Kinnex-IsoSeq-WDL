@@ -56,6 +56,7 @@ task group_flnc_bams_by_sm {
     import pysam
 
     bam_list_path = sys.argv[1]
+    max_sample_name_length = 100
     max_sample_prefix_length = 40
     pysam.set_verbosity(0)
 
@@ -95,6 +96,11 @@ task group_flnc_bams_by_sm {
                 fail(f'{bam} @RG {read_group_id!r} has an empty or whitespace-only SM value')
             if any(char in sample_name for char in '\t\r\n'):
                 fail(f'{bam} has an SM value with tab, carriage return, or newline characters: {sample_name!r}')
+            if len(sample_name) > max_sample_name_length:
+                fail(
+                    f'{bam} @RG {read_group_id!r} has an SM value longer than '
+                    f'{max_sample_name_length} characters: {len(sample_name)} characters'
+                )
             observed_samples.add(sample_name)
 
         if len(observed_samples) != 1:
@@ -250,7 +256,7 @@ task pbsamoa_merge_aligned_bams {
       --order coordinate \
       --compress-threads ~{compress_threads} \
       --decode-threads ~{decode_threads} \
-      --memory ~{mem_gb}G \
+      --memory "~{floor(mem_gb / 2)}G" \
       --compression ~{compression} \
       "~{out_prefix}.aligned.bam" \
       "~{sep="\" \"" bams}"
@@ -271,7 +277,7 @@ task pbsamoa_merge_aligned_bams {
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/pbsamoa@sha256:381891341e4d33ea9b3ca1c8a7cac7d86d4feea282bc8d12b6201a77cbd4216e"  # 20250702_build1
+    docker: runtime_attributes.container_registry + "/pbsamoa@sha256:cf70c89422d63c3a4e4b2ffd912160c3e7481303a211cd6134236fe6e9f9461f"  # 20260811_build1
     maxRetries: runtime_attributes.max_retries
   }
 }

@@ -23,6 +23,9 @@ workflow hifi_demux {
     hifi_bam: {
       description: "Input HiFi BAM"
     }
+    movie_name: {
+      description: "Validated acquisition movie name from the input BAM PU value"
+    }
     biosample_csv: {
       description: "Biosample CSV"
     }
@@ -45,6 +48,7 @@ workflow hifi_demux {
 
   input {
     File hifi_bam
+    String movie_name
     File biosample_csv
     File hifi_demux_barcodes
     Array[String] expected_hifi_barcode_pairs
@@ -70,7 +74,7 @@ workflow hifi_demux {
     ignore_xml_biosamples = true,
     output_missing_pairs = true,
     emit_dataset_xml = true,
-    output_prefix = source_dataset_label,
+    output_prefix = movie_name,
     expected_barcode_pairs = expected_hifi_barcode_pairs,
     threads = hifi_demux_lima_threads,
     mem_gb = hifi_demux_lima_mem_gb,
@@ -80,7 +84,7 @@ workflow hifi_demux {
   scatter (demuxed_hifi_bam in run_lima.demuxed_bams) {
     String demuxed_hifi_name = basename(demuxed_hifi_bam, ".bam")
     String barcode_pair = sub(demuxed_hifi_name, "^.*\\.", "")
-    String normalized_dataset_name = source_dataset_label + "." + barcode_pair
+    String normalized_dataset_name = movie_name + "." + barcode_pair
 
     call DemuxSetupTasks.derive_cdna_biosample_csv as derive_cdna_for_demuxed { input:
       three_col_csv = biosample_csv,

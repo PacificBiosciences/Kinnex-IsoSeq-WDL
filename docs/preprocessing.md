@@ -1,16 +1,15 @@
 # preprocessing.wdl inputs and outputs
 
-This entrypoint implements the preprocessing workflow for both supported
-starting states: either HiFi demux mode for one raw HiFi BAM, or cDNA
-demux-only mode for one or more already HiFi-demuxed BAMs.
+This entrypoint supports both preprocessing starting states: HiFi demux mode
+for one raw HiFi BAM, and cDNA demux-only mode for one or more already
+HiFi-demultiplexed BAMs.
 
-After this normalization step, all datasets follow the same downstream
-preprocessing path: `skera split`, cDNA demultiplexing with `lima`, and
-`isoseq refine`.
+Both modes follow the same downstream preprocessing path: `skera split`, cDNA
+demultiplexing with `lima`, and `isoseq refine`.
 
-This workflow remains available as a standalone preprocessing entrypoint. It is
-also called by [the end-to-end HiFi BAM workflow](./kinnex_isoseq.md) before
-the FLNC-level `secondary_analysis` stages.
+You can run this workflow as a standalone preprocessing entrypoint. The
+[end-to-end HiFi BAM workflow](./kinnex_isoseq.md) also calls it before the
+FLNC-level `secondary_analysis` stages.
 
 ## Inputs
 
@@ -18,19 +17,20 @@ the FLNC-level `secondary_analysis` stages.
 | ---- | ---- | ----------- |
 | Array[HiFiSource] | hifi_sources | Input HiFi source BAMs. Omit `hifi_barcode` for HiFi demux mode, or provide one `hifi_barcode` per BAM for cDNA demux-only mode. |
 | File | [biosample_csv](./biosample_csv.md) | Shared 3-column biosample CSV with exact header `HiFi Barcode,cDNA Barcode,Bio Sample`. |
-| String? | [reference_container](./reference_container.md) | Optional immutable reference-container URI ending in a 64-character lowercase `@sha256:` digest. It supplies defaults for resources not overridden below. |
+| String | [ref_name](./reference_container.md#named-reference-selection) | Packaged reference to use when `reference_container` is omitted. Choices: `GRCh38_gencode49`. Default: `"GRCh38_gencode49"`. |
+| String? | [reference_container](./reference_container.md#explicit-container-override) | Optional explicit immutable reference-container URI ending in a 64-character lowercase `@sha256:` digest. It takes precedence over `ref_name`. |
 | ReferenceOverrides | [reference_overrides](./reference_container.md#typed-overrides) | Optional typed per-file overrides. Default: empty. |
-| String? | kinnex_primers_set | Optional Kinnex primer set used to select packaged Skera adapters when `reference_overrides.skera_adapters` is absent: `8fold`, `12fold`, or `16fold`. Omission selects `8fold`; supplying both inputs is an error. |
-| Array[File]? | consensusreadset_xmls | Optional SMRT Link/internal input ConsensusReadSet XMLs for FLNC dataset XML generation. |
+| String? | segmentation_adapter_set | Optional segmentation adapter set used to select packaged Skera adapters when `reference_overrides.segmentation_adapters` is absent: `8-fold`, `12-fold`, or `16-fold`. Omission selects `8-fold`; supplying both inputs is an error. |
+| String? | isoseq_primers_set | Optional Iso-Seq primer set used to select packaged indexed primers when `reference_overrides.indexed_primers` is absent: `IsoSeq-v2` or `IsoSeq96`. Omission selects `IsoSeq-v2`; supplying both inputs is an error. |
 | Boolean | isoseq_require_polya | Pass `--require-polya` to downstream `isoseq refine`. Default: `true`. |
-| String | backend | Backend where the workflow will be executed. Default: `"HPC"`; only HPC is currently supported. |
+| String | backend | Execution backend. Default: `"HPC"`; only HPC is currently supported. |
 | Int | max_retries | Maximum retries for failed task attempts. Default: `2`. |
-| Int | add_memory_mb | Add Task Memory (MB). Increasing this number allocates extra memory per task when submitting jobs to the compute backend. Default: `0`. |
-| String? | container_registry | Optional PacBio registry for registry-relative task images. If omitted, `"quay.io/pacbio"` is used; full image references are not rewritten. |
+| Int | add_memory_mb | Extra memory in MB added to each task request. Default: `0`. |
+| String? | container_registry | Optional PacBio registry for registry-relative task images and named reference containers. If omitted, `"quay.io/pacbio"` is used; explicit full image references are not rewritten. |
 
-The resources are documented in the
-[reference-container contract](./reference_container.md). The `biosample_csv`
-is run-specific and must be prepared separately for each run.
+The [reference-container specification](./reference_container.md) documents
+the resources. The `biosample_csv` is run specific and must be prepared for
+each run.
 
 `HiFiSource` has the following fields:
 
@@ -85,32 +85,38 @@ biological sample name that should be written to final FLNC BAM `SM` tags. See
 [the biosample CSV specification](./biosample_csv.md) for the CSV schema,
 examples, and mode-specific barcode rules.
 
-The workflow internally derives lima-compatible 2-column CSVs from the
-3-column sheet. For both source states, the cDNA step uses a 2-column CSV
-filtered to the rows belonging to a single outer barcode, mapping
-`cDNA Barcode -> Bio Sample`. The downstream cDNA `lima` step always receives this
+The workflow derives lima-compatible 2-column CSVs from the 3-column sheet. For
+both source states, it filters the sheet to one outer barcode and maps
+`cDNA Barcode -> Bio Sample`. Downstream cDNA `lima` always receives this
 derived per-outer CSV and overwrites `SM` tags with the CSV sample names.
 
 ### Validation
 
-The workflow validates the simplified input contract before upstream HiFi demux,
-`skera`, or cDNA `lima` starts:
+The workflow validates its inputs before upstream HiFi demux, `skera`, or cDNA
+`lima` starts:
 
-- source BAM basenames must be unique because they become output prefixes
+- source BAM basenames must be unique so source-dataset reporting identities
+  remain unambiguous
 - HiFi demux mode requires exactly one `hifi_sources` entry
 - cDNA demux-only mode requires every `hifi_sources` entry to include
   `hifi_barcode`
 - every `hifi_barcode` value must exist in `biosample_csv`
-- already HiFi-demuxed source BAMs must each contain exactly one distinct
-  `@RG PU` value, and all BAMs must share the same `PU`
+- in both modes, every source BAM must contain exactly one valid `@RG PU` movie
+  name, and all source BAMs must share that movie name
 - all cDNA Barcode pairs in `biosample_csv` are checked against the
-  `barcoded_primers`
+  `indexed_primers`
 - in HiFi demux mode, all outer barcode pairs in `biosample_csv` are
   checked against the `hifi_demux_barcodes` and must be symmetric
 - in cDNA demux-only mode, all `hifi_barcode` values are checked against
   the `hifi_demux_barcodes`
+- in cDNA demux-only mode, a recognized HiFi barcode in a source BAM basename
+  that conflicts with the supplied `hifi_barcode` produces a warning
 - `Bio Sample` names must be 40 characters or fewer and may contain only
   alphanumeric characters, underscores, and hyphens
+
+The validated `PU` movie name, not the source BAM basename, supplies the output
+prefix. Lima's split-named barcode suffixes and Refine's naming step produce
+`<movie>.<hifi-barcode>.<cdna-barcode>.flnc.bam` names.
 
 When preprocessing outputs are passed to `secondary_analysis`, FLNC grouping
 derives sanitized filename prefixes from the final BAM `SM` values and fails if
@@ -138,14 +144,19 @@ infer or normalize names such as `bcM0001` into `bcM0001--bcM0001`.
 
 Datasets normalized by the internal `hifi_demux` step are named as:
 
-- `<basename(hifi_bam, ".bam")>.<barcode-pair>`
+- `<movie-from-PU>.<barcode-pair>`
 
-For example, a source BAM named `m21003_240927_230709.hifi_reads.bam` plus a
-HiFi-demux BAM named with `bcM0001--bcM0001` becomes downstream dataset
-`m21003_240927_230709.hifi_reads.bcM0001--bcM0001`.
+Final FLNC BAMs are named as:
 
-Datasets in cDNA demux-only mode use `basename(hifi_bam, ".bam")` as the
-downstream dataset name.
+- `<movie-from-PU>.<hifi-barcode-pair>.<cdna-barcode-pair>.flnc.bam`
+
+These names are stable if an input BAM is renamed because the movie component
+comes from the BAM header rather than its basename.
+
+For example, an input BAM with `PU:m21003_240927_230709` and outer barcode
+`bcM0001--bcM0001` becomes downstream dataset
+`m21003_240927_230709.bcM0001--bcM0001`, regardless of the source BAM basename.
+The same rule applies in HiFi-demux and cDNA-demux-only modes.
 
 The workflow gathers the filter-summary report from every successful
 `isoseq refine` call into one table-oriented PacBio report. Each row represents
@@ -171,10 +182,6 @@ metrics are not aggregated across repeated samples.
 | Array[File] | flnc_bams | Flattened FLNC BAMs across all normalized downstream datasets. |
 | Array[File] | flnc_bam_pbis | Flattened PacBio BAM indexes for FLNC BAMs across all normalized downstream datasets. |
 | File | refine_summary_report | Combined `isoseq refine` filter-summary report with one table row per successful technical partition. |
-| File? | flnc_dataset_xml | Optional generated top-level FLNC ConsensusReadSet XML when `consensusreadset_xmls` is provided. |
-| Array[File]? | flnc_child_dataset_xmls | Optional generated per-biosample child FLNC ConsensusReadSet XMLs. |
-| Array[File]? | flnc_dataset_bams | Optional FLNC BAMs referenced by generated dataset XMLs. |
-| Array[File]? | flnc_dataset_bam_pbis | Optional FLNC BAM indexes referenced by generated dataset XMLs. |
 
-Tool log files are generated inside task execution directories for debugging,
-but are not exposed as workflow outputs.
+Tasks write tool logs in their execution directories for debugging. The
+workflow does not expose those logs as outputs.

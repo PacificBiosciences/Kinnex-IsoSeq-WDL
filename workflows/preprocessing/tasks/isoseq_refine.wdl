@@ -52,8 +52,8 @@ task isoseq_refine {
     demuxed_bam: {
       description: "Demuxed BAM"
     }
-    barcoded_primers: {
-      description: "Barcoded primer FASTA"
+    indexed_primers: {
+      description: "Iso-Seq indexed-primer FASTA"
     }
     isoseq_require_polya: {
       description: "Pass --require-polya to isoseq refine"
@@ -76,7 +76,7 @@ task isoseq_refine {
     String cdna_barcode
     String bio_sample
     File demuxed_bam
-    File barcoded_primers
+    File indexed_primers
     Boolean isoseq_require_polya = true
     Int threads = 16
     Int mem_gb = 32
@@ -100,7 +100,7 @@ task isoseq_refine {
       --log-file "~{demuxed_name}.isoseq_refine.log" \
       ~{true="--require-polya" false="" isoseq_require_polya} \
       "~{demuxed_bam}" \
-      "~{barcoded_primers}" \
+      "~{indexed_primers}" \
       "~{output_prefix}.bam"
   >>>
 

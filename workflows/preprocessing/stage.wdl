@@ -30,11 +30,11 @@ workflow preprocessing_stage {
     datasets: {
       description: "Outer-barcode HiFi datasets"
     }
-    skera_adapters: {
-      description: "skera adapter FASTA"
+    segmentation_adapters: {
+      description: "Segmentation adapter FASTA"
     }
-    barcoded_primers: {
-      description: "Barcoded primer FASTA"
+    indexed_primers: {
+      description: "Iso-Seq indexed-primer FASTA"
     }
     isoseq_require_polya: {
       description: "Pass --require-polya to isoseq refine"
@@ -64,8 +64,8 @@ workflow preprocessing_stage {
 
   input {
     Array[HiFiDemuxedDataset] datasets
-    File skera_adapters
-    File barcoded_primers
+    File segmentation_adapters
+    File indexed_primers
     Boolean isoseq_require_polya = true
     Int skera_split_threads = 16
     Int skera_split_mem_gb = 32
@@ -80,7 +80,7 @@ workflow preprocessing_stage {
     call SkeraTasks.skera_split_hifi { input:
       dataset_name = dataset.dataset_name,
       hifi_bam = dataset.hifi_bam,
-      skera_adapters = skera_adapters,
+      segmentation_adapters = segmentation_adapters,
       threads = skera_split_threads,
       mem_gb = skera_split_mem_gb,
       runtime_attributes = runtime_attributes
@@ -88,7 +88,7 @@ workflow preprocessing_stage {
 
     call Lima.run_lima as cdna_lima { input:
       bam = skera_split_hifi.segmented_bam,
-      barcode_file = barcoded_primers,
+      barcode_file = indexed_primers,
       biosample_csv = dataset.cdna_biosample_csv,
       isoseq = true,
       split_named = true,
@@ -110,7 +110,7 @@ workflow preprocessing_stage {
         cdna_barcode = cdna_lima.demuxed_barcode_pairs[demuxed_index],
         bio_sample = cdna_lima.demuxed_bio_samples[demuxed_index],
         demuxed_bam = demuxed_bam,
-        barcoded_primers = barcoded_primers,
+        indexed_primers = indexed_primers,
         isoseq_require_polya = isoseq_require_polya,
         threads = isoseq_refine_threads,
         mem_gb = isoseq_refine_mem_gb,

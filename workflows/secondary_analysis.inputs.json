@@ -2,7 +2,7 @@
   "secondary_analysis.flnc_bams": [
     "File"
   ],
-  "secondary_analysis.reference_container": "String? (optional)",
+  "secondary_analysis.ref_name": "GRCh38_gencode49",
   "secondary_analysis.reference_overrides": {
     "genome_fasta": "File? (optional)",
     "annotation_gtf_gz": "File? (optional)",
@@ -14,6 +14,7 @@
   "secondary_analysis.pigeon_use_cage_peak": true,
   "secondary_analysis.pigeon_use_junction": true,
   "secondary_analysis.isocall_extra_merged_profile": "File? (optional)",
+  "secondary_analysis.isocall_config_preset": "default",
   "secondary_analysis.output_prefix": "joint",
   "secondary_analysis.backend": "HPC"
 }

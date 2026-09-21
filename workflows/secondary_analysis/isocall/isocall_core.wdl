@@ -38,14 +38,11 @@ workflow isocall_core {
     genome_fasta_index: {
       description: "Reference FASTA index"
     }
-    isocall_min_read_fraction: {
-      description: "Minimum read fraction for joint isocall calling"
+    isocall_config_preset: {
+      description: "Isocall calling configuration preset"
     }
-    isocall_max_bundles_per_gene: {
-      description: "Maximum bundles per gene for joint isocall calling"
-    }
-    isocall_min_reads_per_isoform: {
-      description: "Minimum reads per isoform for joint isocall calling"
+    isocall_config_file: {
+      description: "Optional custom Isocall TOML configuration file, which takes precedence over the preset"
     }
     output_prefix: {
       description: "Output prefix"
@@ -86,9 +83,8 @@ workflow isocall_core {
     File annotation_gtf_gz
     File genome_fasta
     File genome_fasta_index
-    Float isocall_min_read_fraction = 0.99
-    Int isocall_max_bundles_per_gene = 10000
-    Int isocall_min_reads_per_isoform = 3
+    String isocall_config_preset = "default"
+    File? isocall_config_file
     String output_prefix = "joint"
     Int isocall_profile_threads = 4
     Int isocall_profile_mem_gb = 32
@@ -136,9 +132,8 @@ workflow isocall_core {
     known_isoforms_model = isocall_prep_isoforms.known_isoforms_model,
     genome_fasta = genome_fasta,
     genome_fasta_index = genome_fasta_index,
-    isocall_min_read_fraction = isocall_min_read_fraction,
-    isocall_max_bundles_per_gene = isocall_max_bundles_per_gene,
-    isocall_min_reads_per_isoform = isocall_min_reads_per_isoform,
+    isocall_config_preset = isocall_config_preset,
+    isocall_config_file = isocall_config_file,
     threads = isocall_call_threads,
     mem_gb = isocall_call_mem_gb,
     runtime_attributes = runtime_attributes,
