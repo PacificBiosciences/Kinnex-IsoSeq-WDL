@@ -1,6 +1,7 @@
 version 1.0
 
 import "../../rna_structs.wdl"
+import "pigeon_report.wdl" as PigeonReport
 import "tasks.wdl" as Tasks
 
 workflow isoform_classification_core {
@@ -15,6 +16,12 @@ workflow isoform_classification_core {
       },
       pigeon_filtered_classification: {
         description: "Filtered pigeon classification table"
+      },
+      pigeon_summary_report: {
+        description: "Transcript Mapping and Classification report with per-sample metrics and joint plots"
+      },
+      pigeon_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Pigeon summary report"
       }
     }
   }
@@ -117,9 +124,27 @@ workflow isoform_classification_core {
     output_prefix = output_prefix
   }
 
+  call PigeonReport.pigeon_gene_saturation { input:
+    pigeon_filtered_classification = pigeon_filter_isoforms.pigeon_filtered_classification,
+    supporting_reads = pigeon_filter_isoforms.supporting_reads,
+    runtime_attributes = runtime_attributes,
+    output_prefix = output_prefix
+  }
+
+  call PigeonReport.generate_pigeon_report { input:
+    pigeon_classify_report = pigeon_classify_isoforms.pigeon_classify_report,
+    pigeon_filter_report = pigeon_filter_isoforms.pigeon_filter_report,
+    pigeon_classification = pigeon_classify_isoforms.pigeon_classification,
+    pigeon_filtered_classification = pigeon_filter_isoforms.pigeon_filtered_classification,
+    pigeon_saturation = pigeon_gene_saturation.pigeon_saturation,
+    runtime_attributes = runtime_attributes
+  }
+
   output {
     File pigeon_classification = pigeon_classify_isoforms.pigeon_classification
     File filtered_isoforms_gtf = pigeon_filter_isoforms.filtered_isoforms_gtf
     File pigeon_filtered_classification = pigeon_filter_isoforms.pigeon_filtered_classification
+    File pigeon_summary_report = generate_pigeon_report.pigeon_summary_report
+    Array[File] pigeon_summary_report_resources = generate_pigeon_report.pigeon_summary_report_resources
   }
 }

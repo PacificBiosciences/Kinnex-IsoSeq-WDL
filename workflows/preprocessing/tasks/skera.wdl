@@ -11,6 +11,18 @@ task skera_split_hifi {
       },
       segmented_bam: {
         description: "Segmented BAM"
+      },
+      skera_summary_csv: {
+        description: "Skera segmentation summary CSV"
+      },
+      skera_summary_json: {
+        description: "Skera segmentation summary report"
+      },
+      read_lengths_csv: {
+        description: "Skera per-S-read length metrics"
+      },
+      ligations_csv: {
+        description: "Skera adapter ligation counts"
       }
     }
   }
@@ -67,12 +79,16 @@ task skera_split_hifi {
   output {
     String dataset_name_out = dataset_name
     File segmented_bam = "~{output_prefix}.sreads.bam"
+    File skera_summary_csv = "~{output_prefix}.sreads.summary.csv"
+    File skera_summary_json = "~{output_prefix}.sreads.summary.json"
+    File read_lengths_csv = "~{output_prefix}.sreads.read_lengths.csv"
+    File ligations_csv = "~{output_prefix}.sreads.ligations.csv"
   }
 
   runtime {
     cpu: effective_threads
     memory: total_mem_mb + " MB"
-    docker: runtime_attributes.container_registry + "/skera@sha256:f823bd64f2beec351cae82e67c9c6f257b4896ddd59f8b2050568d59f3a165f6"  # 1.4.0_build3
+    docker: runtime_attributes.container_registry + "/skera@sha256:1d2420baf3a1e3232e3f1daf611cc76c192797bc2a06639ca06a7ad0ddb05cfb"  # 26.2.0_build1
     maxRetries: runtime_attributes.max_retries
   }
 }

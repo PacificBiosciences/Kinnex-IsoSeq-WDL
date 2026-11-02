@@ -1,25 +1,23 @@
 # secondary_analysis.wdl inputs and outputs
 
-This entrypoint validates and groups FLNC BAMs by sample, aligns each input BAM
-independently, and merges same-sample alignments before running isocall
+This workflow validates FLNC BAMs and groups them by sample. It aligns each
+input BAM independently, merges same-sample alignments, then runs isocall
 profiling and joint calling. Isoform classification uses the resulting joint
 isoform GTF and count matrix.
 
-The workflow starts from FLNC BAMs. Use
-[the end-to-end HiFi BAM workflow](./kinnex_isoseq.md) for an entrypoint
-that includes preprocessing.
+For an entrypoint that also includes preprocessing, use
+[the end-to-end HiFi BAM workflow](./kinnex_isoseq.md).
 
-FLNC grouping, `pbmm2 align`, and same-sample aligned-BAM merging are
-implemented in
-[the FLNC alignment tasks](../workflows/secondary_analysis/alignment/flnc_alignment_tasks.wdl).
-This workflow orchestrates the tasks but does not expose a standalone public
+The [FLNC alignment tasks](../workflows/secondary_analysis/alignment/flnc_alignment_tasks.wdl)
+handle grouping, `pbmm2 align`, and merging aligned BAMs from the same sample.
+This workflow coordinates those tasks but does not expose a standalone public
 grouping or alignment entrypoint.
 
 The workflow builds one `pbmm2` reference index with the `ISOSEQ` preset outside
-the alignment scatter and passes it to every per-input alignment. Input BAMs
-within the same sample group can align in parallel. After alignment, `pbsamoa`
-merges multi-BAM sample groups, while one-BAM groups pass their `pbmm2` BAM and
-BAI through directly.
+the alignment scatter. Every per-input alignment uses that index, and BAMs in
+the same sample group can align in parallel. After alignment, `pbsamoa` merges
+multi-BAM sample groups. One-BAM groups pass their `pbmm2` BAM and BAI through
+directly.
 
 ## Inputs
 
@@ -41,32 +39,32 @@ BAI through directly.
 | Int | add_memory_mb | Extra memory in MB added to each task request. Default: `0`. |
 | String? | container_registry | Optional PacBio registry for registry-relative task images and named reference containers. If omitted, `"quay.io/pacbio"` is used; explicit full image references are not rewritten. |
 
-For external FLNC BAM inputs, `secondary_analysis` is more permissive than
-preprocessing: original `SM` values may contain punctuation and spaces, but must
-not be empty, longer than 100 characters, or contain tab, carriage-return, or
-newline characters. The exact original `SM` is preserved as the sample name and
-in read-group metadata. For filenames, the workflow derives a sanitized sample
-prefix by replacing every run of non-alphanumeric characters with `_`, removing
-leading/trailing `_`, and truncating the result to 40 characters. If this
-produces an empty prefix, or if two different original `SM` values produce the
-same sanitized prefix, the workflow fails.
+For external FLNC BAM inputs, `secondary_analysis` has less restrictive
+sample-name rules than preprocessing. Original `SM` values may contain punctuation and spaces,
+but cannot be empty, exceed 100 characters, or contain tab, carriage-return, or
+newline characters. The workflow preserves the exact original `SM` as the
+sample name and in read-group metadata. For filenames, it derives a sanitized
+sample prefix by replacing every run of non-alphanumeric characters with `_`,
+removing leading and trailing `_`, and truncating the result to 40 characters.
+The workflow fails if the prefix is empty or if two different original `SM`
+values produce the same sanitized prefix.
 
 Only the isoform-classification stage uses the Pigeon resources from the
-resolved reference set. The workflow validates that the annotation GTF is
-already in Pigeon input order. It materializes CAGE and junction resources and
-generates their Pigeon `.pgi` indices only when the resource is available and
-its `pigeon_use_*` boolean is `true`. It passes polyA only when that resource is
+resolved reference set. The workflow checks that the annotation GTF is already
+in Pigeon input order. It prepares CAGE and junction resources and generates
+their Pigeon `.pgi` indices only when the resource is available and its
+`pigeon_use_*` boolean is `true`. It passes polyA only when that resource is
 available and enabled, and forwards the joint `isocall call` count matrix to
 `pigeon classify --flnc`.
 
-Overriding `genome_fasta` also requires an explicit matching
-`annotation_gtf_gz` override. It disables fallback to all packaged Pigeon
-support resources; each support is then independently enabled by supplying its
-override. See the [reference-resource specification](./reference_container.md#typed-overrides).
+A `genome_fasta` override also requires an explicit matching
+`annotation_gtf_gz` override and disables fallback to all packaged Pigeon
+support resources. You can then enable each support resource independently by
+supplying its override. See the [reference-resource specification](./reference_container.md#typed-overrides).
 
-Task runtime blocks own CPU, base memory, retry, and Docker image selection.
-Public inputs expose only the shared backend knobs above; `add_memory_mb` adds
-to each task memory request.
+Task runtime blocks specify CPU, base memory, retry behavior, and Docker images.
+Public inputs expose only the shared backend settings above; `add_memory_mb`
+adds to each task's memory request.
 
 ## Outputs
 
@@ -88,6 +86,31 @@ to each task memory request.
 | File | pigeon_classification | Output from `pigeon classify`. |
 | File | filtered_isoforms_gtf | Filtered lite isoform GTF from `pigeon filter`. |
 | File | pigeon_filtered_classification | Filtered lite classification table from `pigeon filter`. |
+| File | pigeon_summary_report | Transcript Mapping and Classification report, `isoseq_mapping.report.json`, with per-sample native metrics, joint classification tables and plots, and filtered pooled gene saturation. |
+| Array[File] | pigeon_summary_report_resources | Twelve PNG companions referenced by the report: six full-size images and six `_thumb.png` thumbnails. |
 
-Tasks write tool logs in their execution directories for debugging. The
+Each task writes tool logs to its execution directory for debugging. The
 workflow does not expose those logs as outputs.
+
+## Transcript mapping and classification reporting
+
+Secondary analysis publishes the report and companion resources generated by
+the isoform-classification stage. The report has three tables and three
+two-plot groups, labeled `(All Samples)`. Only the summary table is per sample.
+It matches native classify/filter metrics by exact sample name and includes
+samples with zero retained support and additional merged-profile samples.
+Classification tables and plots count joint isoforms once, while saturation
+pools supporting reads from the filtered classification.
+
+Saturation always runs native `pigeon report --exclude-singletons`. A
+transcript identity contributes to gene detection only after it has more than
+one sampled supporting read. Known reference transcript identities pool
+support; novel isoform identities remain separate. All sampled reads remain on
+the x-axis. This fixed saturation policy does not change classification,
+filtering, native summary metrics, or category/length plots. There is no
+configurable input for the policy. The native saturation
+TSV remains internal. Keep the JSON with all twelve PNG resources, including
+empty-state plots and thumbnails.
+
+See the [classification report overview](./isoform_classification.md#transcript-mapping-and-classification-report)
+for report contents and interpretation.

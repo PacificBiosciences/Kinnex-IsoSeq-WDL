@@ -55,6 +55,12 @@ workflow secondary_analysis {
       },
       pigeon_filtered_classification: {
         description: "Filtered pigeon classification table"
+      },
+      pigeon_summary_report: {
+        description: "Transcript Mapping and Classification summary metrics, joint classification tables and plots, and filtered gene saturation"
+      },
+      pigeon_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Transcript Mapping and Classification report"
       }
     }
   }
@@ -187,7 +193,7 @@ workflow secondary_analysis {
 
   output {
     String workflow_name = "secondary_analysis"
-    String workflow_version = "0.4.0"
+    String workflow_version = "1.0.0"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
     String reference_mode = resolve_reference_resources.reference_mode
     String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version
@@ -202,5 +208,7 @@ workflow secondary_analysis {
     File pigeon_classification = secondary_analysis_core.pigeon_classification
     File filtered_isoforms_gtf = secondary_analysis_core.filtered_isoforms_gtf
     File pigeon_filtered_classification = secondary_analysis_core.pigeon_filtered_classification
+    File pigeon_summary_report = secondary_analysis_core.pigeon_summary_report
+    Array[File] pigeon_summary_report_resources = secondary_analysis_core.pigeon_summary_report_resources
   }
 }

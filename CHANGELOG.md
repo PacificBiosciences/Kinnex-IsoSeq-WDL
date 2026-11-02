@@ -2,7 +2,32 @@
 
 This changelog records changes to the PacBio Kinnex Iso-Seq Pipeline.
 
-## [Unreleased]
+## [1.0.0]
+
+### New features
+
+- Added read segmentation reporting to preprocessing and the end-to-end
+  workflow: `segmentation_summary_csv`, `segmentation_summary_report`, and
+  `segmentation_summary_report_resources`. Reports combine Skera metrics by
+  HiFi barcode, with weighted summary statistics and per-barcode plots.
+- Expanded Iso-Seq Refine reporting in preprocessing and the end-to-end
+  workflow: `refine_summary_report` and `refine_summary_report_resources`.
+  Reports include summary metrics, a Primer Data table, and primer read-count,
+  primer-quality, and FLNC read-length plots.
+- Added transcript mapping and classification reporting to standalone isoform
+  classification, secondary analysis, and the end-to-end workflow:
+  `pigeon_summary_report` and `pigeon_summary_report_resources`. Reports include
+  per-sample gene and isoform metrics, joint classification tables and plots
+  before and after filtering, and pooled filtered gene-saturation plots.
+
+### Improvements
+
+- Updated Skera from 1.4.0 to
+  [26.2.0](https://github.com/PacificBiosciences/skera/releases/tag/v26.2.0).
+
+### Fixes
+
+- Copy reference overrides into workflow-owned files before downstream use.
 
 ## [0.4.0]
 
@@ -31,7 +56,6 @@ This changelog records changes to the PacBio Kinnex Iso-Seq Pipeline.
 
 - Updated Isocall from 1.1.0 to [1.3.0](https://github.com/PacificBiosciences/isocall/releases/tag/1.3.0).
 - Updated Slurm examples and development tooling to Sprocket 0.30.1, and added
-  Jenkins validation and real-container task-test coverage.
 
 ### Fixes
 

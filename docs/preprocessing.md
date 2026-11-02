@@ -158,12 +158,43 @@ For example, an input BAM with `PU:m21003_240927_230709` and outer barcode
 `m21003_240927_230709.bcM0001--bcM0001`, regardless of the source BAM basename.
 The same rule applies in HiFi-demux and cDNA-demux-only modes.
 
-The workflow gathers the filter-summary report from every successful
-`isoseq refine` call into one table-oriented PacBio report. Each row represents
-one technical partition and retains the original `Bio Sample`, source BAM
-basename, `HiFi Barcode`, and `cDNA Barcode`. Repeated `Bio Sample` names remain
-unchanged and are disambiguated by those technical identity columns; report
-metrics are not aggregated across repeated samples.
+### Reports
+
+#### Read segmentation
+
+The Read Segmentation report summarizes Skera results by HiFi barcode,
+including read counts, mean S-read length, full-array percentage, and mean
+array size. Inputs with the same HiFi barcode are combined using summed
+counts and read-weighted averages.
+
+`segmentation_summary_csv` contains the barcode summary table.
+`segmentation_summary_report` adds overall metrics and per-barcode plots.
+Keep the report with its `segmentation_summary_report_resources` PNGs and
+thumbnails. Barcodes without S-reads have no plots.
+
+#### Iso-Seq Refine
+
+The Iso-Seq Refine report (`isoseq_refine.report.json`) contains:
+
+- **Summary metrics:** assigned and unbarcoded read counts, refine filter
+  counts, barcode-combination statistics, and mean FLNC read length.
+- **Primer Data table:** read counts, primer quality, and refine results for
+  each source dataset and HiFi/cDNA barcode combination.
+- **Plots:** primer read counts and quality scores, plus FLNC read-length
+  distributions and heatmaps.
+
+Read totals cover the cDNA Lima stage after Skera, including assigned primer
+pairs absent from the sample sheet and reads without primers. Unselected
+pairs appear as `UNASSIGNED`, with null refine counts because no refine call
+ran for them. Reads without primers appear in separate No Primer rows.
+
+Table rows retain source and barcode identities. Plots combine sources only
+when the HiFi barcode, cDNA barcode, and biological sample all match;
+repeating a sample name alone does not merge different barcode combinations.
+
+Keep `refine_summary_report` with its `refine_summary_report_resources` PNGs
+and thumbnails. Plots are omitted when the corresponding assigned or FLNC
+reads are absent; summary metrics and No Primer rows are still reported.
 
 ## Outputs
 
@@ -181,7 +212,11 @@ metrics are not aggregated across repeated samples.
 | Array[String] | flnc_names | Flattened FLNC output basenames across all normalized downstream datasets. |
 | Array[File] | flnc_bams | Flattened FLNC BAMs across all normalized downstream datasets. |
 | Array[File] | flnc_bam_pbis | Flattened PacBio BAM indexes for FLNC BAMs across all normalized downstream datasets. |
-| File | refine_summary_report | Combined `isoseq refine` filter-summary report with one table row per successful technical partition. |
+| File | segmentation_summary_csv | `segmentation.summary.csv`, with one weighted Skera metric row per distinct HiFi barcode in first-seen normalized-input order. |
+| File | segmentation_summary_report | PacBio Read Segmentation report `segmentation.summary.report.json`, containing the same barcode table, all-input metrics, and four plots per distinct HiFi barcode with S-reads. |
+| Array[File] | segmentation_summary_report_resources | Per-barcode Read Segmentation PNG images and `_thumb.png` thumbnails referenced by `segmentation_summary_report`; empty when the total S-read count is zero. |
+| File | refine_summary_report | Iso-Seq Refine summary metrics, primer data, and read-length plots in `isoseq_refine.report.json`. |
+| Array[File] | refine_summary_report_resources | PNG images and thumbnails referenced by the Iso-Seq Refine report; empty when no plots are produced. |
 
 Tasks write tool logs in their execution directories for debugging. The
 workflow does not expose those logs as outputs.

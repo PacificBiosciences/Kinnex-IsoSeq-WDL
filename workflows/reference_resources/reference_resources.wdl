@@ -243,10 +243,13 @@ task validate_reference_sources {
   }
 }
 
-task index_reference_fasta {
+task prepare_reference_fasta {
   meta {
-    description: "Generate a FASTA index for an overridden reference genome."
+    description: "Copy and index an overridden reference genome."
     outputs: {
+      prepared_genome_fasta: {
+        description: "Prepared reference FASTA"
+      },
       genome_fasta_index: {
         description: "Generated reference FASTA index"
       }
@@ -270,7 +273,6 @@ task index_reference_fasta {
   Int threads = 1
   Int mem_gb = 2
   Int total_mem_mb = (mem_gb * 1024) + runtime_attributes.add_memory_mb
-  String genome_fasta_index_basename = basename(genome_fasta) + ".fai"
 
   command <<<
     set -euo pipefail
@@ -287,13 +289,170 @@ task index_reference_fasta {
             )
     PY
 
-    samtools faidx \
-      --fai-idx "~{genome_fasta_index_basename}" \
-      "~{genome_fasta}"
+    mkdir -p prepared_reference
+    cp -- "~{genome_fasta}" prepared_reference/reference.fa
+    samtools faidx prepared_reference/reference.fa
   >>>
 
   output {
-    File genome_fasta_index = genome_fasta_index_basename
+    File prepared_genome_fasta = "prepared_reference/reference.fa"
+    File genome_fasta_index = "prepared_reference/reference.fa.fai"
+  }
+
+  runtime {
+    cpu: threads
+    memory: total_mem_mb + " MB"
+    docker: runtime_attributes.container_registry + "/pb_wdl_base@sha256:03cb3c01937eccc907f8ad71c87b258581504572205fe3f31a657e318f3564ae"
+    maxRetries: runtime_attributes.max_retries
+  }
+}
+
+task copy_reference_overrides {
+  meta {
+    description: "Copy supplied non-genome reference overrides into task-owned files that keep their original basenames."
+    outputs: {
+      copied_annotation_gtf_gz: {
+        description: "Copied compressed annotation GTF override"
+      },
+      copied_pigeon_poly_a: {
+        description: "Copied Pigeon polyA motif list override"
+      },
+      copied_pigeon_cage_peak_bed: {
+        description: "Copied Pigeon CAGE peak BED override"
+      },
+      copied_pigeon_junction_coverage: {
+        description: "Copied Pigeon junction coverage override"
+      },
+      copied_hifi_demux_barcodes: {
+        description: "Copied HiFi-demultiplexing barcode FASTA override"
+      },
+      copied_indexed_primers: {
+        description: "Copied Iso-Seq indexed-primer FASTA override"
+      },
+      copied_segmentation_adapters: {
+        description: "Copied Skera segmentation adapter FASTA override"
+      }
+    }
+  }
+
+  parameter_meta {
+    annotation_gtf_gz: {
+      description: "Compressed annotation GTF override"
+    }
+    pigeon_poly_a: {
+      description: "Pigeon polyA motif list override"
+    }
+    pigeon_cage_peak_bed: {
+      description: "Pigeon CAGE peak BED override"
+    }
+    pigeon_junction_coverage: {
+      description: "Pigeon junction coverage override"
+    }
+    hifi_demux_barcodes: {
+      description: "HiFi-demultiplexing barcode FASTA override"
+    }
+    indexed_primers: {
+      description: "Iso-Seq indexed-primer FASTA override"
+    }
+    segmentation_adapters: {
+      description: "Skera segmentation adapter FASTA override"
+    }
+    runtime_attributes: {
+      description: "Runtime attribute structure"
+    }
+  }
+
+  input {
+    File? annotation_gtf_gz
+    File? pigeon_poly_a
+    File? pigeon_cage_peak_bed
+    File? pigeon_junction_coverage
+    File? hifi_demux_barcodes
+    File? indexed_primers
+    File? segmentation_adapters
+    RuntimeAttributes runtime_attributes
+  }
+
+  Int threads = 1
+  Int mem_gb = 1
+  Int total_mem_mb = (mem_gb * 1024) + runtime_attributes.add_memory_mb
+
+  # Absent overrides map to paths that are never created, so their optional outputs are undefined.
+  String annotation_gtf_gz_path = if defined(annotation_gtf_gz)
+    then "annotation_gtf_gz/" + basename(select_first([
+      annotation_gtf_gz
+    ]))
+    else "annotation_gtf_gz/absent"
+  String pigeon_poly_a_path = if defined(pigeon_poly_a)
+    then "pigeon_poly_a/" + basename(select_first([
+      pigeon_poly_a
+    ]))
+    else "pigeon_poly_a/absent"
+  String pigeon_cage_peak_bed_path = if defined(pigeon_cage_peak_bed)
+    then "pigeon_cage_peak_bed/" + basename(select_first([
+      pigeon_cage_peak_bed
+    ]))
+    else "pigeon_cage_peak_bed/absent"
+  String pigeon_junction_coverage_path = if defined(pigeon_junction_coverage)
+    then "pigeon_junction_coverage/" + basename(select_first([
+      pigeon_junction_coverage
+    ]))
+    else "pigeon_junction_coverage/absent"
+  String hifi_demux_barcodes_path = if defined(hifi_demux_barcodes)
+    then "hifi_demux_barcodes/" + basename(select_first([
+      hifi_demux_barcodes
+    ]))
+    else "hifi_demux_barcodes/absent"
+  String indexed_primers_path = if defined(indexed_primers)
+    then "indexed_primers/" + basename(select_first([
+      indexed_primers
+    ]))
+    else "indexed_primers/absent"
+  String segmentation_adapters_path = if defined(segmentation_adapters)
+    then "segmentation_adapters/" + basename(select_first([
+      segmentation_adapters
+    ]))
+    else "segmentation_adapters/absent"
+
+  command <<<
+    set -euo pipefail
+
+    copy_override() {
+      mkdir -p "$1"
+      cp -- "$2" "$1/"
+    }
+
+    if [[ "~{defined(annotation_gtf_gz)}" == "true" ]]; then
+      copy_override annotation_gtf_gz "~{annotation_gtf_gz}"
+    fi
+    if [[ "~{defined(pigeon_poly_a)}" == "true" ]]; then
+      copy_override pigeon_poly_a "~{pigeon_poly_a}"
+    fi
+    if [[ "~{defined(pigeon_cage_peak_bed)}" == "true" ]]; then
+      copy_override pigeon_cage_peak_bed "~{pigeon_cage_peak_bed}"
+    fi
+    if [[ "~{defined(pigeon_junction_coverage)}" == "true" ]]; then
+      copy_override pigeon_junction_coverage "~{pigeon_junction_coverage}"
+    fi
+    if [[ "~{defined(hifi_demux_barcodes)}" == "true" ]]; then
+      copy_override hifi_demux_barcodes "~{hifi_demux_barcodes}"
+    fi
+    if [[ "~{defined(indexed_primers)}" == "true" ]]; then
+      copy_override indexed_primers "~{indexed_primers}"
+    fi
+    if [[ "~{defined(segmentation_adapters)}" == "true" ]]; then
+      copy_override segmentation_adapters "~{segmentation_adapters}"
+    fi
+  >>>
+
+  output {
+    File? copied_annotation_gtf_gz = annotation_gtf_gz_path
+    File? copied_pigeon_poly_a = pigeon_poly_a_path
+    File? copied_pigeon_cage_peak_bed = pigeon_cage_peak_bed_path
+    File? copied_pigeon_junction_coverage = pigeon_junction_coverage_path
+    File? copied_hifi_demux_barcodes = hifi_demux_barcodes_path
+    File? copied_indexed_primers = indexed_primers_path
+    File? copied_segmentation_adapters = segmentation_adapters_path
   }
 
   runtime {
@@ -451,8 +610,25 @@ workflow resolve_reference_resources {
     File overridden_genome_fasta = select_first([
       reference_overrides.genome_fasta
     ])
-    call index_reference_fasta { input:
+    call prepare_reference_fasta { input:
       genome_fasta = overridden_genome_fasta,
+      runtime_attributes = runtime_attributes
+    }
+  }
+
+  # The needs_* terms order this call after validation; every valid profile sets at least one.
+  Boolean has_copied_overrides = length(present_override_names) > (if uses_genome_override
+    then 1
+    else 0)
+  if ((needs_genome || needs_pigeon || needs_preprocessing) && has_copied_overrides) {
+    call copy_reference_overrides { input:
+      annotation_gtf_gz = reference_overrides.annotation_gtf_gz,
+      pigeon_poly_a = reference_overrides.pigeon_poly_a,
+      pigeon_cage_peak_bed = reference_overrides.pigeon_cage_peak_bed,
+      pigeon_junction_coverage = reference_overrides.pigeon_junction_coverage,
+      hifi_demux_barcodes = reference_overrides.hifi_demux_barcodes,
+      indexed_primers = reference_overrides.indexed_primers,
+      segmentation_adapters = reference_overrides.segmentation_adapters,
       runtime_attributes = runtime_attributes
     }
   }
@@ -460,14 +636,14 @@ workflow resolve_reference_resources {
   if (needs_genome) {
     File selected_genome_fasta = if uses_genome_override
       then select_first([
-        reference_overrides.genome_fasta
+        prepare_reference_fasta.prepared_genome_fasta
       ])
       else select_first([
         unpack_reference_container.genome_fasta
       ])
     File selected_genome_fasta_index = if uses_genome_override
       then select_first([
-        index_reference_fasta.genome_fasta_index
+        prepare_reference_fasta.genome_fasta_index
       ])
       else select_first([
         unpack_reference_container.genome_fasta_index
@@ -475,33 +651,29 @@ workflow resolve_reference_resources {
   }
 
   if (needs_genome) {
-    File selected_annotation_gtf_gz = if uses_genome_override
-      then select_first([
-        reference_overrides.annotation_gtf_gz
-      ])
-      else select_first([
-        reference_overrides.annotation_gtf_gz,
-        unpack_reference_container.annotation_gtf_gz
-      ])
+    File selected_annotation_gtf_gz = select_first([
+      copy_reference_overrides.copied_annotation_gtf_gz,
+      unpack_reference_container.annotation_gtf_gz
+    ])
   }
 
   if (needs_pigeon) {
     File? selected_pigeon_poly_a = if uses_genome_override
-      then reference_overrides.pigeon_poly_a
+      then copy_reference_overrides.copied_pigeon_poly_a
       else select_first([
-        reference_overrides.pigeon_poly_a,
+        copy_reference_overrides.copied_pigeon_poly_a,
         unpack_reference_container.pigeon_poly_a
       ])
     File? selected_pigeon_cage_peak_bed = if uses_genome_override
-      then reference_overrides.pigeon_cage_peak_bed
+      then copy_reference_overrides.copied_pigeon_cage_peak_bed
       else select_first([
-        reference_overrides.pigeon_cage_peak_bed,
+        copy_reference_overrides.copied_pigeon_cage_peak_bed,
         unpack_reference_container.pigeon_cage_peak_bed
       ])
     File? selected_pigeon_junction_coverage = if uses_genome_override
-      then reference_overrides.pigeon_junction_coverage
+      then copy_reference_overrides.copied_pigeon_junction_coverage
       else select_first([
-        reference_overrides.pigeon_junction_coverage,
+        copy_reference_overrides.copied_pigeon_junction_coverage,
         unpack_reference_container.pigeon_junction_coverage
       ])
   }
@@ -535,16 +707,16 @@ workflow resolve_reference_resources {
 
   if (needs_preprocessing) {
     File selected_hifi_demux_barcodes = select_first([
-      reference_overrides.hifi_demux_barcodes,
+      copy_reference_overrides.copied_hifi_demux_barcodes,
       unpack_reference_container.hifi_demux_barcodes
     ])
     File selected_indexed_primers = select_first([
-      reference_overrides.indexed_primers,
+      copy_reference_overrides.copied_indexed_primers,
       selected_packaged_indexed_primers_isoseq_v2,
       selected_packaged_indexed_primers_isoseq96
     ])
     File selected_segmentation_adapters = select_first([
-      reference_overrides.segmentation_adapters,
+      copy_reference_overrides.copied_segmentation_adapters,
       selected_packaged_segmentation_adapters_8fold,
       selected_packaged_segmentation_adapters_12fold,
       selected_packaged_segmentation_adapters_16fold

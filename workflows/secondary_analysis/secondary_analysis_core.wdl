@@ -44,6 +44,12 @@ workflow secondary_analysis_core {
       },
       pigeon_filtered_classification: {
         description: "Filtered pigeon classification table"
+      },
+      pigeon_summary_report: {
+        description: "Transcript Mapping and Classification summary metrics, joint classification tables and plots, and filtered gene saturation"
+      },
+      pigeon_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Transcript Mapping and Classification report"
       }
     }
   }
@@ -176,7 +182,7 @@ workflow secondary_analysis_core {
     String output_prefix = "joint"
     Int pbsamoa_merge_compression = 6
     Int pbsamoa_merge_threads = 32
-    Int pbsamoa_merge_mem_gb = 16
+    Int pbsamoa_merge_mem_gb = 32
     Int pbmm2_index_threads = 8
     Int pbmm2_index_mem_gb = 32
     Int pbmm2_align_threads = 32
@@ -318,5 +324,7 @@ workflow secondary_analysis_core {
     File pigeon_classification = isoform_classification_core.pigeon_classification
     File filtered_isoforms_gtf = isoform_classification_core.filtered_isoforms_gtf
     File pigeon_filtered_classification = isoform_classification_core.pigeon_filtered_classification
+    File pigeon_summary_report = isoform_classification_core.pigeon_summary_report
+    Array[File] pigeon_summary_report_resources = isoform_classification_core.pigeon_summary_report_resources
   }
 }
