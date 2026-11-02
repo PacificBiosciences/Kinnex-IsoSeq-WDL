@@ -197,6 +197,9 @@ task pigeon_classify_isoforms {
       pigeon_classification: {
         description: "Pigeon classification table"
       },
+      pigeon_classify_report: {
+        description: "Native Pigeon per-sample classification metrics"
+      },
       junctions: {
         description: "Pigeon junctions table"
       }
@@ -314,6 +317,7 @@ task pigeon_classify_isoforms {
   output {
     File pigeon_classification = "~{output_prefix}.pigeon_classification.txt"
     File junctions = "~{output_prefix}.pigeon_junctions.txt"
+    File pigeon_classify_report = "~{output_prefix}.pigeon.report.json"
   }
 
   runtime {
@@ -333,6 +337,12 @@ task pigeon_filter_isoforms {
       },
       pigeon_filtered_classification: {
         description: "Filtered pigeon classification table"
+      },
+      pigeon_filter_report: {
+        description: "Native Pigeon per-sample retained lite-classification metrics"
+      },
+      supporting_reads: {
+        description: "Pooled FL.<sample> supporting reads in the filtered classification, used to size native saturation memory"
       }
     }
   }
@@ -398,11 +408,19 @@ task pigeon_filter_isoforms {
       --log-file "~{output_prefix}.pigeon.filter.log" \
       --isoforms "${expected_isoforms}" \
       "${expected_classification}"
+
+    # pigeon report pools every FL.<sample> count, treating NA as zero.
+    awk -F '\t' \
+      'NR == 1 { for (i = 1; i <= NF; i++) if ($i ~ /^FL\./) columns[i] } NR > 1 { for (i in columns) if ($i != "NA") total += $i } END { printf "%.0f\n", total }' \
+      "~{output_prefix}.pigeon_classification.filtered_lite_classification.txt" \
+      > supporting_reads.txt
   >>>
 
   output {
     File filtered_isoforms_gtf = "~{output_prefix}.isoforms.filtered_lite.gtf"
     File pigeon_filtered_classification = "~{output_prefix}.pigeon_classification.filtered_lite_classification.txt"
+    File pigeon_filter_report = "~{output_prefix}.pigeon_classification.filtered.report.json"
+    Int supporting_reads = read_int("supporting_reads.txt")
   }
 
   runtime {

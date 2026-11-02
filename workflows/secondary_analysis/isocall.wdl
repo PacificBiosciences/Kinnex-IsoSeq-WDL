@@ -150,7 +150,7 @@ workflow isocall {
 
   output {
     String workflow_name = "isocall"
-    String workflow_version = "0.4.0"
+    String workflow_version = "1.0.0"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
     String reference_mode = resolve_reference_resources.reference_mode
     String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version

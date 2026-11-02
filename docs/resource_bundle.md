@@ -2,7 +2,7 @@
 
 The Kinnex Iso-Seq static resource bundle contains the GRCh38 genome,
 annotation and Pigeon support files, plus Kinnex barcode, adapter, and primer
-FASTAs. Workflow version `0.4.0` can resolve these files from a versioned
+FASTAs. Workflow version `1.0.0` can resolve these files from a versioned
 [reference container](./reference_container.md), typed per-file overrides, or
 both.
 
@@ -23,11 +23,11 @@ takes precedence. Each workflow uses only the reusable resources it needs:
 - annotation GTF;
 - Pigeon polyA, CAGE, and junction resources.
 
-When a required resource has an override, that file takes precedence over its
-container counterpart. An overridden genome must be an uncompressed FASTA (the
-workflow generates its FASTA index), while a container genome uses its packaged
-index. A fully custom run omits the container and supplies all required
-user-selectable files. `kinnex_isoseq` and `preprocessing` also accept optional
+A resource override takes precedence over the corresponding file in the
+container. A genome override must be an uncompressed FASTA. The workflow copies it and generates its index without changing the source; a container genome uses its packaged index. The workflow also copies every other supplied override without changing the source.
+
+A fully custom run omits the container and supplies all required user-selectable
+files. `kinnex_isoseq` and `preprocessing` also accept optional
 `segmentation_adapter_set` to select the packaged 8-, 12-, or 16-fold Kinnex
 segmentation-adapter FASTA when `reference_overrides.segmentation_adapters` is
 absent; omission selects `8-fold`. Their optional `isoseq_primers_set` selects

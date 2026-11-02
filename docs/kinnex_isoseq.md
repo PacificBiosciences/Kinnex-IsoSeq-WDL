@@ -1,15 +1,18 @@
 # kinnex_isoseq.wdl inputs and outputs
 
-This entrypoint chains preprocessing with FLNC-level secondary analysis.
-
-Starting from HiFi source BAMs, it generates FLNC BAMs in preprocessing and
-passes them to secondary analysis. Secondary analysis validates and groups the
-BAMs by sample, aligns each BAM independently, merges same-sample alignments,
-runs isocall profiling and joint calling, and then runs isoform classification
-on the joint isoform GTF and count matrix.
+This workflow starts with HiFi source BAMs and runs preprocessing to generate
+FLNC BAMs. It passes those BAMs to secondary analysis, which validates and
+groups them by sample, aligns each BAM independently, and merges same-sample
+alignments. Secondary analysis then runs isocall profiling and joint calling,
+followed by isoform classification on the joint isoform GTF and count matrix.
 
 Call [FLNC-level secondary analysis](./secondary_analysis.md) directly if you
 already have FLNC BAMs.
+
+Preprocessing produces read segmentation and Iso-Seq Refine reports covering
+Skera metrics, primer assignment, refine results, and FLNC read lengths.
+See the [preprocessing report overview](./preprocessing.md#reports) for contents
+and interpretation. Keep each report with its companion PNGs and thumbnails.
 
 ## Inputs
 
@@ -29,21 +32,43 @@ already have FLNC BAMs.
 | Int | add_memory_mb | Extra memory in MB added to each task request. Default: `0`. |
 | String? | container_registry | Optional PacBio registry for registry-relative task images and named reference containers. If omitted, `"quay.io/pacbio"` is used; explicit full image references are not rewritten. |
 
-Effective resources can come entirely from the reference container or typed
-overrides, or from overrides layered on the container defaults. The
+Resources can come entirely from the reference container, entirely from typed
+overrides, or from overrides combined with container defaults. The
 `biosample_csv` and input BAMs remain run-specific filesystem inputs. See the
 [reference-resource contract](./reference_container.md) for required fields,
 override precedence, and validation rules.
 
-Overriding `genome_fasta` also requires an explicit `annotation_gtf_gz`
-override and disables fallback to the packaged Pigeon support files. This
-supports non-GRCh38 genomes, including mouse, without silently mixing
+A `genome_fasta` override also requires an explicit `annotation_gtf_gz`
+override and disables fallback to the packaged Pigeon support files. This lets
+you use non-GRCh38 genomes, including mouse, without silently mixing
 genome-specific resources.
 
-The `HiFiSource` fields, mode examples, source BAM validation rules, and
-sample-sheet rules are described in
+For `HiFiSource` fields, mode examples, source BAM validation rules, and
+sample-sheet rules, see
 [the preprocessing workflow interface](./preprocessing.md) and
 [the biosample CSV specification](./biosample_csv.md).
+
+Read segmentation metrics combine inputs by HiFi barcode. Refine report tables
+retain source and barcode identities; their plots combine sources only when
+the HiFi barcode, cDNA barcode, and biological sample all match.
+
+The end-to-end wrapper also publishes the Transcript Mapping and Classification
+report from secondary analysis. Filtered gene saturation always runs native
+`pigeon report --exclude-singletons`. A transcript identity contributes to gene
+detection only after it has more than one sampled supporting read. Known
+reference transcript identities pool support, while novel isoform identities
+remain separate. All sampled reads remain on the x-axis. This fixed saturation
+policy does not change classification/filter outputs, native summary metrics,
+or category/length plots.
+
+The report has per-sample native summary metrics, unfiltered and filtered joint
+classification tables, their category/length plots, and pooled filtered
+all-gene/known-gene saturation plots. These make up three tables and three
+two-plot groups. Keep `pigeon_summary_report` (`isoseq_mapping.report.json`) with
+all twelve `pigeon_summary_report_resources` PNGs (six full images and six
+thumbnails), including empty-state plots. The raw saturation TSV remains
+internal. See the [classification report overview](./isoform_classification.md#transcript-mapping-and-classification-report)
+for report contents and interpretation.
 
 ## Outputs
 
@@ -63,7 +88,11 @@ sample-sheet rules are described in
 | Array[String] | flnc_names | Flattened FLNC output basenames across all normalized downstream datasets. |
 | Array[File] | flnc_bams | Flattened FLNC BAMs across all normalized downstream datasets. |
 | Array[File] | flnc_bam_pbis | Flattened PacBio BAM indexes for FLNC BAMs across all normalized downstream datasets. |
-| File | refine_summary_report | Combined `isoseq refine` filter-summary report with one table row per successful technical partition, identified by Bio Sample, source dataset, HiFi barcode, and cDNA barcode. |
+| File | segmentation_summary_csv | `segmentation.summary.csv`, with one weighted Skera metric row per distinct HiFi barcode in first-seen normalized-input order. |
+| File | segmentation_summary_report | PacBio Read Segmentation report `segmentation.summary.report.json`, containing the same barcode table, all-input metrics, and four plots per distinct HiFi barcode with S-reads. |
+| Array[File] | segmentation_summary_report_resources | Per-barcode Read Segmentation PNG images and `_thumb.png` thumbnails referenced by `segmentation_summary_report`; empty when the total S-read count is zero. |
+| File | refine_summary_report | Iso-Seq Refine summary metrics, primer data, and read-length plots in `isoseq_refine.report.json`. |
+| Array[File] | refine_summary_report_resources | PNG images and thumbnails referenced by the Iso-Seq Refine report; empty when no plots are produced. |
 | Array[String] | sample_names | Exact `SM` values from input FLNC BAM headers, in first-seen input order. |
 | Array[String] | sample_prefixes | Filename-safe sanitized prefixes derived from `sample_names`, in sample order. For preprocessing-produced FLNC BAMs, strict `Bio Sample` names usually make these prefixes match the sample names except that non-alphanumeric separators such as `_` and `-` are normalized to `_`. |
 | Array[Int] | group_sizes | Number of input FLNC BAMs in each sample group. |
@@ -75,6 +104,8 @@ sample-sheet rules are described in
 | File | pigeon_classification | Output from `pigeon classify`. |
 | File | filtered_isoforms_gtf | Filtered lite isoform GTF from `pigeon filter`. |
 | File | pigeon_filtered_classification | Filtered lite classification table from `pigeon filter`. |
+| File | pigeon_summary_report | Transcript Mapping and Classification report, `isoseq_mapping.report.json`, from the secondary-analysis classification stage. |
+| Array[File] | pigeon_summary_report_resources | Twelve companion PNGs referenced by the report: six full-size plot images and six `_thumb.png` thumbnails. |
 
-Tasks write tool logs in their execution directories for debugging. The
+Each task writes tool logs to its execution directory for debugging. The
 workflow does not expose those logs as outputs.

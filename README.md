@@ -133,12 +133,15 @@ resource setup. You can instead supply an explicit immutable
 Use `reference_overrides` to replace any user-selectable resource. A run can
 use container defaults, combine a container with overrides, or supply every
 resource required by its entrypoint.
-When all effective resources are overridden, the default named container is
-not unpacked. An overridden genome must be an uncompressed FASTA. The workflow
-generates its matching FASTA index and requires an explicit matching annotation
-override. Packaged Pigeon support files do not fall back for a custom genome:
-polyA, CAGE, and junction support are each optional and require their own
-override to be used. This rule is especially important for mouse and other
+
+The workflow skips the reference container when every resource it uses has an
+override. Overrides are copied into the run and the source files are left
+unchanged. A genome override must be an uncompressed FASTA with a matching
+annotation override; the workflow generates its FASTA index.
+
+With a custom genome, polyA, CAGE, and junction support are optional, but each
+requires an override. The workflow does not use packaged Pigeon support files.
+This rule is especially important for mouse and other
 non-GRCh38 genomes. See the
 [reference-resource specification](docs/reference_container.md) for validation
 rules and cross-resource compatibility responsibilities.
@@ -268,7 +271,7 @@ WDL runtime blocks.
 
 ## Version information
 
-Current development version: **0.4.0**.
+Current workflow version: **1.0.0**.
 
 For a complete changelog, see the [changelog](CHANGELOG.md) or the git history.
 

@@ -2,6 +2,7 @@ version 1.0
 
 import "tasks/isoseq_refine.wdl" as IsoSeqRefineTasks
 import "tasks/lima.wdl" as Lima
+import "tasks/read_segmentation_report.wdl" as ReadSegmentationReportTasks
 import "tasks/skera.wdl" as SkeraTasks
 
 workflow preprocessing_stage {
@@ -20,8 +21,20 @@ workflow preprocessing_stage {
       flnc_bam_pbis: {
         description: "FLNC BAM PBIs"
       },
+      segmentation_summary_csv: {
+        description: "Per-HiFi-barcode Skera segmentation metrics"
+      },
+      segmentation_summary_report: {
+        description: "Read Segmentation metrics and per-barcode plots"
+      },
+      segmentation_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Read Segmentation report"
+      },
       refine_summary_report: {
-        description: "Combined isoseq refine summary report"
+        description: "Iso-Seq Refine summary metrics, primer data, and read-length plots"
+      },
+      refine_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Iso-Seq Refine report"
       }
     }
   }
@@ -77,6 +90,7 @@ workflow preprocessing_stage {
   }
 
   scatter (dataset in datasets) {
+    String hifi_barcode = dataset.hifi_barcode
     call SkeraTasks.skera_split_hifi { input:
       dataset_name = dataset.dataset_name,
       hifi_bam = dataset.hifi_bam,
@@ -92,6 +106,7 @@ workflow preprocessing_stage {
       biosample_csv = dataset.cdna_biosample_csv,
       isoseq = true,
       split_named = true,
+      store_unbarcoded = true,
       overwrite_biosample_names = true,
       output_prefix = dataset.dataset_name,
       expected_barcode_pairs = dataset.cdna_barcode_pairs,
@@ -99,6 +114,10 @@ workflow preprocessing_stage {
       mem_gb = cdna_lima_mem_gb,
       runtime_attributes = runtime_attributes
     }
+
+    Int lima_pbi_count = length(cdna_lima.report_bam_pbis)
+    String source_dataset_name = dataset.source_dataset_name
+    File cdna_biosample_csv = dataset.cdna_biosample_csv
 
     scatter (demuxed_index in range(length(cdna_lima.demuxed_bams))) {
       File demuxed_bam = cdna_lima.demuxed_bams[demuxed_index]
@@ -118,9 +137,25 @@ workflow preprocessing_stage {
       }
     }
   }
+  call ReadSegmentationReportTasks.generate_read_segmentation_report { input:
+    hifi_barcodes = hifi_barcode,
+    skera_summary_csvs = skera_split_hifi.skera_summary_csv,
+    skera_summary_jsons = skera_split_hifi.skera_summary_json,
+    read_lengths_csvs = skera_split_hifi.read_lengths_csv,
+    ligations_csvs = skera_split_hifi.ligations_csv,
+    segmentation_adapters = segmentation_adapters,
+    runtime_attributes = runtime_attributes
+  }
 
   call IsoSeqRefineTasks.gather_isoseq_refine_reports { input:
     refine_report_rows = flatten(isoseq_refine.serialized_refine_report_row),
+    flnc_bam_pbis = flatten(isoseq_refine.flnc_bam_pbi),
+    lima_bam_pbis = flatten(cdna_lima.report_bam_pbis),
+    lima_pbi_counts = lima_pbi_count,
+    source_dataset_names = source_dataset_name,
+    hifi_barcodes = hifi_barcode,
+    cdna_biosample_csvs = cdna_biosample_csv,
+    indexed_primers = indexed_primers,
     runtime_attributes = runtime_attributes
   }
 
@@ -130,5 +165,9 @@ workflow preprocessing_stage {
     Array[File] flnc_bams = flatten(isoseq_refine.flnc_bam)
     Array[File] flnc_bam_pbis = flatten(isoseq_refine.flnc_bam_pbi)
     File refine_summary_report = gather_isoseq_refine_reports.refine_summary_report
+    Array[File] refine_summary_report_resources = gather_isoseq_refine_reports.refine_summary_report_resources
+    File segmentation_summary_csv = generate_read_segmentation_report.segmentation_summary_csv
+    File segmentation_summary_report = generate_read_segmentation_report.segmentation_summary_report
+    Array[File] segmentation_summary_report_resources = generate_read_segmentation_report.segmentation_summary_report_resources
   }
 }

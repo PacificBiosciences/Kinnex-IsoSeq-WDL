@@ -20,6 +20,9 @@ task run_lima {
       },
       unbarcoded_bams: {
         description: "Unbarcoded BAMs"
+      },
+      report_bam_pbis: {
+        description: "Indexes for all observed barcode pairs and retained unbarcoded reads"
       }
     }
   }
@@ -318,6 +321,7 @@ task run_lima {
     Array[String] demuxed_barcode_pairs = read_lines("demuxed_barcode_pairs.txt")
     Array[String] demuxed_bio_samples = read_lines("demuxed_bio_samples.txt")
     Array[File] unbarcoded_bams = read_lines("unbarcoded_bams.txt")
+    Array[File] report_bam_pbis = glob("demux/*.bam.pbi")
   }
 
   runtime {

@@ -5,8 +5,7 @@ The `biosample_csv` input is the preprocessing sample sheet used by
 outer SMRTbell barcode and cDNA Barcode combination to the biological sample
 name that should be written to the final FLNC BAM `SM` tag.
 
-The checked-in
-[biosamples.example.csv](../backends/hpc/biosamples.example.csv) sits next to
+The checked-in [biosamples.example.csv](../backends/hpc/biosamples.example.csv) is next to
 the public HPC input templates. Use it as a starting point. It contains all 48
 combinations of outer barcodes `bcM0001` through `bcM0004` and cDNA barcodes
 `IsoSeqX_bc01_5p` through `IsoSeqX_bc12_5p`. Each cDNA barcode uses the shared
@@ -150,10 +149,10 @@ bcU0001_5p--bcU0001_3p,sample_1
 
 The repeated `sample_1` assignment is allowed because it occurs under different
 outer barcodes. Those FLNC BAMs will carry the same `SM` value and can be merged
-later during FLNC alignment. The combined `isoseq refine` report keeps one row
-per technical partition and shows `Bio Sample`, source dataset, HiFi barcode,
-and cDNA barcode as separate columns, so repeated biological sample names
-remain unambiguous without being rewritten.
+later during FLNC alignment. The Iso-Seq Refine report's Primer Data table
+keeps source dataset, HiFi barcode, and cDNA barcode as separate identity
+columns, so repeated biological sample names remain unambiguous without being
+rewritten.
 
 ### Repeated samples across outer barcodes
 

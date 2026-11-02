@@ -44,8 +44,20 @@ workflow preprocessing {
       flnc_bam_pbis: {
         description: "FLNC BAM PBIs"
       },
+      segmentation_summary_csv: {
+        description: "Per-HiFi-barcode Skera segmentation metrics"
+      },
+      segmentation_summary_report: {
+        description: "Read Segmentation metrics and per-barcode plots"
+      },
+      segmentation_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Read Segmentation report"
+      },
       refine_summary_report: {
-        description: "Combined isoseq refine summary report"
+        description: "Iso-Seq Refine summary metrics, primer data, and read-length plots"
+      },
+      refine_summary_report_resources: {
+        description: "PNG images and thumbnails referenced by the Iso-Seq Refine report"
       }
     }
   }
@@ -175,7 +187,7 @@ workflow preprocessing {
 
   output {
     String workflow_name = "preprocessing"
-    String workflow_version = "0.4.0"
+    String workflow_version = "1.0.0"
     String? reference_container_uri = resolve_reference_resources.reference_container_uri
     String reference_mode = resolve_reference_resources.reference_mode
     String? base_resource_bundle_version = resolve_reference_resources.base_resource_bundle_version
@@ -186,6 +198,10 @@ workflow preprocessing {
     Array[String] flnc_names = preprocessing_core.flnc_names
     Array[File] flnc_bams = preprocessing_core.flnc_bams
     Array[File] flnc_bam_pbis = preprocessing_core.flnc_bam_pbis
+    File segmentation_summary_csv = preprocessing_core.segmentation_summary_csv
+    File segmentation_summary_report = preprocessing_core.segmentation_summary_report
+    Array[File] segmentation_summary_report_resources = preprocessing_core.segmentation_summary_report_resources
     File refine_summary_report = preprocessing_core.refine_summary_report
+    Array[File] refine_summary_report_resources = preprocessing_core.refine_summary_report_resources
   }
 }
