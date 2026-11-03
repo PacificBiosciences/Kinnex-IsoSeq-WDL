@@ -1,10 +1,5 @@
 <h1 align="center">PacBio Kinnex Iso-Seq Pipeline</h1>
 
-> [!WARNING]
-> **BETA:** This workflow is under active development. Interfaces, defaults,
-> runtime behavior, and output bundles may change substantially. Use
-> tagged releases for reproducible testing.
-
 This repository contains workflows for analyzing human PacBio Kinnex Iso-Seq
 sequencing data with [Workflow Description Language
 (WDL)](https://openwdl.org/).
